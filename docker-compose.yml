@@ -1,0 +1,87 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: careerops
+      POSTGRES_PASSWORD: careerops
+      POSTGRES_DB: careerops
+    ports:
+      - "5433:5432"
+    volumes:
+      - careerops_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerops"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  app:
+    build: .
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://careerops:careerops@db:5432/careerops
+      BASE_URL: http://localhost:8001
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      USAJOBS_API_KEY: ${USAJOBS_API_KEY:-}
+      USAJOBS_USER_AGENT: ${USAJOBS_USER_AGENT:-}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
+      SES_TO_EMAIL: ${SES_TO_EMAIL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ALERT_INGEST_TOKEN: ${ALERT_INGEST_TOKEN:-}
+      JOB_ALERT_IMAP_HOST: ${JOB_ALERT_IMAP_HOST:-}
+      JOB_ALERT_IMAP_PORT: ${JOB_ALERT_IMAP_PORT:-993}
+      JOB_ALERT_IMAP_USER: ${JOB_ALERT_IMAP_USER:-}
+      JOB_ALERT_IMAP_PASSWORD: ${JOB_ALERT_IMAP_PASSWORD:-}
+      JOB_ALERT_IMAP_FOLDER: ${JOB_ALERT_IMAP_FOLDER:-INBOX}
+    volumes:
+      - ./careerops/uploads:/app/careerops/uploads
+      - ./careerops/generated:/app/careerops/generated
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  watchtower:
+    build: .
+    command: >
+      sh -c "while true; do
+      python -m careerops.workers.discovery;
+      sleep 900;
+      done"
+    environment:
+      DATABASE_URL: postgresql+psycopg://careerops:careerops@db:5432/careerops
+      BASE_URL: http://localhost:8001
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      USAJOBS_API_KEY: ${USAJOBS_API_KEY:-}
+      USAJOBS_USER_AGENT: ${USAJOBS_USER_AGENT:-}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
+      SES_TO_EMAIL: ${SES_TO_EMAIL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ALERT_INGEST_TOKEN: ${ALERT_INGEST_TOKEN:-}
+      JOB_ALERT_IMAP_HOST: ${JOB_ALERT_IMAP_HOST:-}
+      JOB_ALERT_IMAP_PORT: ${JOB_ALERT_IMAP_PORT:-993}
+      JOB_ALERT_IMAP_USER: ${JOB_ALERT_IMAP_USER:-}
+      JOB_ALERT_IMAP_PASSWORD: ${JOB_ALERT_IMAP_PASSWORD:-}
+      JOB_ALERT_IMAP_FOLDER: ${JOB_ALERT_IMAP_FOLDER:-INBOX}
+    volumes:
+      - ./careerops/uploads:/app/careerops/uploads
+      - ./careerops/generated:/app/careerops/generated
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  careerops_postgres:

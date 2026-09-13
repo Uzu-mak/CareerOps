@@ -1,0 +1,36 @@
+{% extends 'base.html' %}{% block title %}Applications · CareerOps{% endblock %}{% block content %}
+<header class='top'><div><div class='eyebrow'>APPLICATION TRACKER</div><h1>Applications</h1><p>CareerOps separates <strong>submitted</strong> from <strong>confirmed submitted</strong>. A submission is only confirmed when the browser agent captures employer confirmation evidence.</p></div></header>
+<section class='metrics'>
+<div class='metric'><span>Applications tracked</span><strong>{{ metrics.total }}</strong><small>prepared + submitted + outcomes</small></div>
+<div class='metric'><span>Confirmed submitted</span><strong>{{ metrics.confirmed }}</strong><small>browser confirmation evidence captured</small></div>
+<div class='metric'><span>Needs review</span><strong>{{ metrics.review }}</strong><small>MFA, sensitive field, or no confirmation</small></div>
+<div class='metric accent'><span>Interviews</span><strong>{{ metrics.interviews }}</strong><small>outcome tracking</small></div>
+</section>
+<section class='panel'><div class='panel-head'><div><span class='eyebrow'>APPLICATION HISTORY</span><h2>What CareerOps actually did</h2></div></div>
+<table><thead><tr><th>Company / Role</th><th>Portal</th><th>Status</th><th>Submission verification</th><th>Submitted</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>
+{% for row in rows %}
+<tr>
+<td><strong>{{row.job.company}}</strong><span>{{row.job.title}}</span></td>
+<td>{{row.application.portal or row.job.ats or '—'}}</td>
+<td><span class='pill {{ 'apply' if row.application.status in ['submitted','interview','offer'] else ('review' if row.application.status=='review' else 'skip') }}'>{{row.application.status|upper}}</span></td>
+<td>
+{% if row.verification.state == 'CONFIRMED' %}<span class='status pass'>CONFIRMED</span><small class='block-note'>Employer confirmation detected</small>
+{% elif row.verification.state == 'UNVERIFIED' %}<span class='status review'>UNVERIFIED</span><small class='block-note'>Marked submitted, but no browser proof</small>
+{% elif row.verification.state == 'REVIEW' %}<span class='status review'>REVIEW</span><small class='block-note'>{{ (row.application.human_review_reasons or ['Needs review'])|join(', ') }}</small>
+{% else %}<span class='status'>NOT SUBMITTED</span>{% endif %}
+</td>
+<td>{% if row.application.submitted_at %}{{row.application.submitted_at.strftime('%Y-%m-%d %H:%M')}} UTC{% else %}—{% endif %}</td>
+<td>
+{% if row.verification.confirmation_term %}<strong class='proof-text'>“{{row.verification.confirmation_term}}”</strong>{% endif %}
+{% if row.verification.screenshot_available %}<a class='mini' target='_blank' href='/api/applications/{{row.application.id}}/evidence/screenshot'>View proof</a>{% endif %}
+{% if row.verification.final_url %}<a class='mini' target='_blank' href='{{row.verification.final_url}}'>Final page</a>{% endif %}
+</td>
+<td><a class='mini' href='/jobs/{{row.job.id}}'>Open job</a>{% if row.job.application_url %}<a class='mini' target='_blank' href='{{row.job.application_url}}'>Employer</a>{% endif %}<button class='mini' onclick='verifyApplication({{row.application.id}})'>Check proof</button><select class='status-select' onchange='updateApplicationStatus({{row.application.id}}, this.value)'><option value=''>Update outcome…</option><option value='interview'>Interview</option><option value='offer'>Offer</option><option value='rejected'>Rejected</option><option value='withdrawn'>Withdrawn</option></select></td>
+</tr>
+{% else %}<tr><td colspan='7'><strong>No applications yet.</strong><span>When CareerOps prepares or submits a job, it will appear here with its verification state.</span></td></tr>{% endfor %}
+</tbody></table></section>
+<section class='grid2 application-explainer'>
+<div class='panel'><span class='eyebrow'>WHAT “CONFIRMED” MEANS</span><h2>Submission evidence</h2><p>CareerOps only displays <strong>CONFIRMED</strong> when the browser sees an employer-side confirmation phrase after clicking submit. It stores the final URL, detected confirmation text, timestamp, and a screenshot when available.</p></div>
+<div class='panel'><span class='eyebrow'>NO FALSE POSITIVES</span><h2>A click is not proof</h2><p>If CareerOps clicks Submit but cannot detect a confirmation, the application is routed to <strong>REVIEW</strong>. A manually changed “submitted” status remains <strong>UNVERIFIED</strong> unless evidence exists.</p></div>
+</section>
+{% endblock %}

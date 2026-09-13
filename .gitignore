@@ -1,0 +1,47 @@
+# Secrets / environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Candidate/private files
+# Resume uploads, application files, etc.
+careerops/uploads/*
+!careerops/uploads/.gitkeep
+
+# Generated resumes, cover letters, screenshots, submission proof
+careerops/generated/*
+!careerops/generated/.gitkeep
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+
+# Terraform / infrastructure state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

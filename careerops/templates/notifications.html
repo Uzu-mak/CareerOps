@@ -1,0 +1,31 @@
+{% extends 'base.html' %}{% block title %}CareerOps Notifications{% endblock %}{% block content %}
+<header class='top'><div><div class='eyebrow'>ALERTS + INBOX INGESTION</div><h1>Notifications</h1><p>CareerOps can alert you when a matching job appears, when an A/A+ role is found, when an application needs review, and when submission is confirmed.</p></div><div class='actions'><button class='btn secondary' onclick='testNotification()'>Send test</button><button class='btn secondary' onclick='pollAlerts()'>Poll alert inbox</button></div></header>
+<section class='grid2'>
+<div class='panel'><span class='eyebrow'>NOTIFICATION POLICY</span><h2>When to notify me</h2>
+<form id='notificationForm'>
+<label><input id='notificationsEnabled' type='checkbox' {% if pref.enabled %}checked{% endif %}> Notifications enabled</label>
+<div class='checkgrid'>
+<label><input id='notifyNewMatch' type='checkbox' {% if pref.notify_new_match %}checked{% endif %}> New matching job</label>
+<label><input id='notifyHighFit' type='checkbox' {% if pref.notify_high_fit %}checked{% endif %}> A/A+ opportunity</label>
+<label><input id='notifyHumanReview' type='checkbox' {% if pref.notify_human_review %}checked{% endif %}> Human review needed</label>
+<label><input id='notifySubmitted' type='checkbox' {% if pref.notify_submitted %}checked{% endif %}> Application confirmed</label>
+<label><input id='notifyFailed' type='checkbox' {% if pref.notify_failed %}checked{% endif %}> Application failed</label>
+</div>
+<label>Minimum fit score for new-job alerts<input id='notifyMinFit' type='number' min='0' max='100' value='{{pref.minimum_fit_score}}'></label>
+<label>Urgent / high-fit threshold<input id='notifyUrgentFit' type='number' min='0' max='100' value='{{pref.urgent_fit_score}}'></label>
+<h3>Channels</h3>
+<label><input id='emailEnabled' type='checkbox' {% if pref.email_enabled %}checked{% endif %}> Email</label><label>Email destination<input id='emailTo' value='{{pref.email_to or ""}}' placeholder='you@example.com'></label>
+<label><input id='slackEnabled' type='checkbox' {% if pref.slack_enabled %}checked{% endif %}> Slack webhook</label><label>Slack webhook URL<input id='slackWebhook' value='{{pref.slack_webhook_url or ""}}'></label>
+<label><input id='discordEnabled' type='checkbox' {% if pref.discord_enabled %}checked{% endif %}> Discord webhook</label><label>Discord webhook URL<input id='discordWebhook' value='{{pref.discord_webhook_url or ""}}'></label>
+<label><input id='telegramEnabled' type='checkbox' {% if pref.telegram_enabled %}checked{% endif %}> Telegram</label><label>Telegram bot token<input id='telegramToken' value='{{pref.telegram_bot_token or ""}}'></label><label>Telegram chat ID<input id='telegramChat' value='{{pref.telegram_chat_id or ""}}'></label>
+<button class='btn' type='button' onclick='saveNotificationSettings()'>Save notification settings</button>
+</form></div>
+<div class='panel'><span class='eyebrow'>LINKEDIN + INDEED ALERT INBOX</span><h2>Job-alert ingestion</h2><p>CareerOps does not scrape logged-in LinkedIn/Indeed pages. Instead it consumes the job-alert emails those services send you, extracts job links, deduplicates them, analyzes fit, and pushes matching jobs into Watchtower.</p>
+<div class='review-box'><strong>Automatic IMAP polling: {{'CONFIGURED' if imap_configured else 'NOT CONFIGURED'}}</strong><span>Set JOB_ALERT_IMAP_HOST / USER / PASSWORD in your .env or AWS Secrets Manager. The Watchtower checks unseen LinkedIn/Indeed alert emails every scan.</span></div>
+<h3>Paste/forward an alert manually</h3><label>Provider<select id='alertProvider'><option value='linkedin'>LinkedIn</option><option value='indeed'>Indeed</option><option value=''>Auto-detect</option></select></label><label>Subject<input id='alertSubject'></label><label>Email body<textarea id='alertText' rows='8' placeholder='Paste the alert email body or forwarded message'></textarea></label><button class='btn' onclick='ingestAlert()'>Ingest & analyze</button>
+<h3>Recent alert messages</h3>{% for a in alerts %}<div class='constraint'><div><strong>{{a.provider|title}} · {{a.subject or 'Job alert'}}</strong><span>{{a.received_at}} · {{a.discovered_urls|length}} URLs · {{a.jobs_created}} jobs created</span></div><span class='status {{"pass" if a.processed else "review"}}'>{{"DONE" if a.processed else "PENDING"}}</span></div>{% else %}<p class='muted'>No alert emails imported yet.</p>{% endfor %}</div>
+</section>
+<section class='panel'><div class='panel-head'><div><span class='eyebrow'>IN-APP NOTIFICATION CENTER</span><h2>Recent events</h2></div><div class='pill'>{{unread}} unread</div></div>
+{% for e in events %}<div class='constraint notification-row'><div><strong>{{e.title}}</strong><span>{{e.message}}</span><small>{{e.created_at}} · {{e.event_type}} · {{e.status}}</small></div><div>{% if e.job_id %}<button class='mini' onclick='location.href="/jobs/{{e.job_id}}"'>Open job</button>{% endif %}{% if not e.read %}<button class='mini' onclick='markNotificationRead({{e.id}})'>Mark read</button>{% endif %}</div></div>{% else %}<p class='muted'>No notifications yet. Run a job scan or send a test notification.</p>{% endfor %}
+</section>
+{% endblock %}

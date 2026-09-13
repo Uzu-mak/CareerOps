@@ -1,0 +1,137 @@
+CAREEROPS AUTOPILOT v3.0 — WINDOWS QUICK START
+==============================================
+
+1. Open Command Prompt / VS Code terminal in this folder.
+
+2. Create your local environment file (Windows CMD):
+
+   copy .env.example .env
+
+   Optional integrations in .env:
+   - ADZUNA_APP_ID / ADZUNA_APP_KEY              broad-market + smaller-company search
+   - USAJOBS_API_KEY / USAJOBS_USER_AGENT        federal jobs search
+   - JOB_ALERT_IMAP_*                            automatic LinkedIn/Indeed alert-email ingestion
+   - SES_FROM_EMAIL / SES_TO_EMAIL               AWS email notifications
+   - SLACK_WEBHOOK_URL / DISCORD_WEBHOOK_URL     webhook alerts
+   - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID       Telegram alerts
+
+   CareerOps works without those keys using public ATS/company sources. Credentialed providers
+   appear as SETUP until configured.
+
+3. Start the local stack:
+
+   docker compose up --build
+
+   Leave that terminal running.
+
+4. Open:
+
+   Dashboard:      http://localhost:8001
+   Profile:        http://localhost:8001/profile
+   Build Journal:  http://localhost:8001/journal
+   Applications:   http://localhost:8001/applications
+   Notifications:  http://localhost:8001/notifications
+   API docs:       http://localhost:8001/docs
+
+5. Configure Candidate Profile FIRST:
+   - upload master resume
+   - LinkedIn + GitHub
+   - portfolio/project/application links
+   - home + preferred locations
+   - search radius
+   - remote/hybrid/onsite
+   - salary floor/target
+   - role families and skills
+   - explicitly verify work-authorization/sponsorship answers
+
+6. Go back to Dashboard and click “Scan jobs now”.
+
+   Fresh databases include:
+   - OpenAI / Ashby
+   - Palantir / Lever
+   - SpaceX official careers
+   - Microsoft careers
+   - Amazon Jobs
+   - Boeing jobs
+   - Meta Careers
+   - Salesforce Careers
+   - LinkedIn Job Alert Inbox
+   - Indeed Job Alert Inbox
+   - Adzuna Broad Market (SETUP until keys are added)
+   - USAJOBS (SETUP until key is added)
+
+   The Watchtower wakes every 15 minutes while Docker is running. Each source also honors its
+   own scan interval. “Scan jobs now” forces an immediate scan.
+
+7. Configure alerts at http://localhost:8001/notifications.
+   CareerOps can notify you for:
+   - new matching job
+   - A/A+ opportunity
+   - human review required
+   - confirmed application submission
+   - application failure
+
+8. LinkedIn / Indeed:
+   CareerOps does NOT scrape logged-in LinkedIn/Indeed pages. Create job alerts on those sites,
+   then either:
+   - configure JOB_ALERT_IMAP_* in .env so Watchtower imports unseen alert emails automatically, or
+   - paste/forward alert content into the Notifications page / /api/alerts/email endpoint.
+
+9. Autopilot:
+   On Dashboard, enable background auto-apply, select minimum fit score, and daily cap.
+   CareerOps requires:
+   - hard constraints not FAIL
+   - recommendation APPLY
+   - fit >= threshold
+   - master resume uploaded
+   - verified legal/work-authorization profile
+   - live application URL
+
+   It tailors resume/cover letter and uses the Playwright browser agent. It pauses for
+   CAPTCHA, MFA, email verification, password ownership, sensitive EEO/legal questions, or
+   ambiguous sponsorship/clearance/export-control questions.
+
+10. Application proof:
+    http://localhost:8001/applications distinguishes:
+    - PREPARED
+    - REVIEW
+    - SUBMITTED + CONFIRMED
+    - SUBMITTED + UNVERIFIED
+    - INTERVIEW / OFFER / REJECTED / WITHDRAWN
+
+    CareerOps only reports CONFIRMED after detecting an employer acknowledgement and stores
+    the final URL, confirmation text and screenshot when available.
+
+11. Daily career memory:
+    Add meaningful work to http://localhost:8001/journal.
+    Each entry becomes CandidateEvidence for future fit scoring, resume tailoring, cover letters,
+    application answers and interview stories. Enter only metrics you actually measured.
+
+USEFUL COMMANDS
+---------------
+Check containers:
+   docker compose ps
+
+App logs:
+   docker compose logs -f app
+
+Watchtower logs:
+   docker compose logs -f watchtower
+
+Force scan:
+   enable_live_sources.bat
+
+Validate project inside Docker:
+   validate_careerops.bat
+
+Stop (PRESERVES DATA):
+   docker compose down
+
+DO NOT run this during upgrades unless you intentionally want to delete PostgreSQL data:
+   docker compose down -v
+
+PORTS
+-----
+Browser:     localhost:8001 -> app:8000
+PostgreSQL:  localhost:5433 -> db:5432
+Internal DB connection: db:5432

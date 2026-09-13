@@ -1,0 +1,3 @@
+@echo off
+echo Starting CareerOps API, PostgreSQL, and Watchtower...
+docker compose up --build
