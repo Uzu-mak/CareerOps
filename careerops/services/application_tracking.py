@@ -55,7 +55,10 @@ def record_browser_result(db: Session, app: Application, result) -> Application:
     else:
         app.status = 'review' if result.manual_fields else 'prepared'
         app.requires_human_review = bool(result.manual_fields)
-        app.human_review_reasons = sorted(set((app.human_review_reasons or []) + list(result.manual_fields or [])))
+        # Questions stay until answered; status blockers from an earlier run are replaced by this run's.
+        from careerops.core.ui_options import is_blocker
+        kept = [r for r in (app.human_review_reasons or []) if not is_blocker(r)]
+        app.human_review_reasons = list(dict.fromkeys(kept + list(result.manual_fields or [])))
 
     db.add(app)
     db.commit()

@@ -46,7 +46,7 @@
           <td>
             {% if v.state == 'CONFIRMED' %}<span class="badge good" title="{{ v.confirmation_term or '' }}">Confirmed</span>
             {% elif v.state == 'UNVERIFIED' %}<span class="badge warn" title="Marked submitted without browser proof">Unverified</span>
-            {% elif v.state == 'REVIEW' %}<a class="badge warn" href="/jobs/{{ row.job.id }}#review" title="{{ (a.human_review_reasons or []) | join(', ') }}">{{ (a.human_review_reasons or []) | length }} to answer</a>
+            {% elif v.state == 'REVIEW' %}<a class="badge warn" href="/jobs/{{ row.job.id }}#review" title="{{ (a.human_review_reasons or []) | join(', ') }}">{{ (a.human_review_reasons or []) | length }} to review</a>
             {% else %}<span class="badge neutral">Not submitted</span>{% endif %}
           </td>
           <td class="hide-sm soft"><time datetime="{{ a.updated_at | iso }}" data-relative>{{ a.updated_at | short_dt }}</time></td>

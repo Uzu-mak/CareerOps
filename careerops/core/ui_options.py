@@ -115,6 +115,59 @@ def _skill_pattern(skill: str) -> re.Pattern:
 _PATTERNS = None
 
 
+# Review reasons that are not questions: what stopped the agent, why, and what to do.
+# (prefix match, title, explanation, suggested action)
+BLOCKERS = [
+    ('application form not detected', "Couldn't find the application form",
+     'The page opened, but CareerOps found no form to fill. The site may need you to sign in first, or the posting may have closed.',
+     'Open the employer page. If it asks you to sign in, apply there yourself, then mark the application Submitted on the Applications page.'),
+    ('final submit control not detected', "Couldn't find the Submit button",
+     'Every field was filled, but no Submit or Next button was recognised.',
+     'Open the employer page, check the form and submit it yourself.'),
+    ('submission confirmation not detected', 'Submitted, but no confirmation appeared',
+     'CareerOps clicked Submit, but no "thank you" message appeared within 20 seconds, so it does not count the application as sent.',
+     'Check your email for a confirmation from the employer. If you got one, set the status to Submitted.'),
+    ('captcha', 'A CAPTCHA appeared',
+     'The site asked for a human check. CareerOps never solves CAPTCHAs.',
+     'Open the employer page and finish the application yourself.'),
+    ('authentication/mfa', 'A verification code was requested',
+     'The site asked for a one-time code (email, SMS or authenticator).',
+     'Sign in on the employer site yourself, then run Apply again.'),
+    ('portal account password', 'The site needs an account',
+     'This portal requires creating an account with a password and email verification. CareerOps never stores portal passwords.',
+     'Create the account on the employer site, then run Apply again.'),
+    ('portal sign-in', 'The site needs you to sign in',
+     'This portal asked for a sign-in before showing the application.',
+     'Sign in on the employer site, then run Apply again.'),
+    ('final submission approval', 'Practice run finished',
+     'This came from the old "Simulate browser agent" practice form, which never submits anything.',
+     'Nothing to do. Dismiss it.'),
+    ('form error:', 'The form showed an error',
+     'After submitting, the employer form reported a problem with one of the answers.',
+     'Open the employer page to see which field it flagged, fix the answer here if it is one of yours, and run Apply again.'),
+    ('truth guard', 'Some resume claims were held back',
+     'The tailored documents left out claims your evidence does not support, so Autopilot did not submit unattended.',
+     'Look at the Documents tab. Add evidence in the Build Journal, or apply manually if you are happy with the documents.'),
+    ('browser error', 'The browser agent crashed',
+     'Something went wrong while running the browser.',
+     'Try a Dry run to see where it stops. If it keeps failing, send the app log.'),
+]
+
+
+def blocker_info(reason: str) -> dict | None:
+    """Explain a review reason that is a status, not a question; None for real questions."""
+    low = (reason or '').strip().lower()
+    for prefix, title, why, action in BLOCKERS:
+        if low.startswith(prefix):
+            detail = reason[len(prefix):].strip(' :-') if prefix.endswith(':') or prefix == 'truth guard' else ''
+            return {'title': title, 'why': why, 'action': action, 'detail': detail}
+    return None
+
+
+def is_blocker(reason: str) -> bool:
+    return blocker_info(reason) is not None
+
+
 def detect_skills(text: str) -> list[str]:
     """Skills from the shared vocabulary that appear in ``text`` as whole words."""
     global _PATTERNS

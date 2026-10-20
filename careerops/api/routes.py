@@ -225,8 +225,7 @@ def simulate_apply(job_id:int, db:Session=Depends(get_db)):
     target=f'{settings.base_url}/mock-ats/apply/{job_id}'
     with agent_run(db,'BrowserApplicationAgent',job_id=job_id,application_id=app.id,input_summary='Playwright fill against local mock ATS') as run:
         result=run_mock_browser(p,j,app); run.output_summary=f'{len(result.filled_fields)} fields filled; {len(result.manual_fields)} manual'
-    app.status='review'; app.requires_human_review=True; app.human_review_reasons=sorted(set(app.human_review_reasons + result.manual_fields + ['final submission approval']))
-    db.add(app); db.commit()
+    # A practice run against the local mock form; it never changes the real application's review queue.
     return result.__dict__
 
 @router.get('/reports/daily')

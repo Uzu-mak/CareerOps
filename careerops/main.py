@@ -20,7 +20,7 @@ from careerops.agents.account import account_plan
 from careerops.services.notifications import get_notification_preferences
 from careerops.services.imap_alerts import imap_configured
 from careerops.services.job_search import job_facets, pending_analysis_count
-from careerops.core.ui_options import as_template_globals, detect_skills, review_input, suggest_roles
+from careerops.core.ui_options import as_template_globals, blocker_info, detect_skills, review_input, suggest_roles
 from careerops.web.view_helpers import iso, money, salary_range, setup_checklist, short_dt
 
 from careerops.core.auth import AuthConfig, AuthMiddleware
@@ -114,9 +114,17 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
             review_items.append({'question':q,'mode':plan.get('mode','REVIEW'),'suggested_answer':plan.get('answer'),
                                  'reason':plan.get('reason','CareerOps needs your answer before it can continue.'),
                                  'answer':row.answer if row else None,'resolved':row.resolved if row else False,
-                                 'notes':row.notes if row else None,'input':review_input(q)})
+                                 'notes':row.notes if row else None,'input':review_input(q),'blocker':blocker_info(q)})
+    blockers=[x for x in review_items if x['blocker']]
+    review_items=[x for x in review_items if not x['blocker']]
+    # Each "Prepare documents" makes a new set; show the newest of each type.
+    latest={}
+    for a in artifacts:
+        latest.setdefault(a.artifact_type, a)
+    older_artifacts=len(artifacts)-len(latest)
+    artifacts=list(latest.values())
     return _render(request, db, 'job.html', profile=profile, job=job, analysis=analysis, application=app_row, artifacts=artifacts,
-                   runs=runs, review_items=review_items, evidence=evidence, account_plan=acct_plan,
+                   runs=runs, review_items=review_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
                    verification=submission_evidence_summary(app_row) if app_row else None)
 
 

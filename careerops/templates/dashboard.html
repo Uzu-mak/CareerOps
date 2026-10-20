@@ -89,8 +89,8 @@
         <div class="list">
           {% for app, job in review_apps %}
             <a class="list-item" href="/jobs/{{ job.id }}#review">
-              <div class="grow"><strong>{{ job.title }}</strong><span class="sub">{{ job.company }} · {{ (app.human_review_reasons or []) | length }} question{{ 's' if (app.human_review_reasons or []) | length != 1 }}</span></div>
-              <span class="badge warn">Answer</span>
+              <div class="grow"><strong>{{ job.title }}</strong><span class="sub">{{ job.company }} · {{ (app.human_review_reasons or []) | length }} to review</span></div>
+              <span class="badge warn">Review</span>
             </a>
           {% else %}
             <div class="empty" style="padding:26px 20px"><svg class="icon"><use href="#i-check"/></svg><span>Nothing is waiting on you.</span></div>

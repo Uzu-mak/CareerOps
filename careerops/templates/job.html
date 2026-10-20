@@ -3,6 +3,8 @@
 {% block content %}
 {% set apply_url = job.application_url or job.canonical_url %}
 {% set open_questions = review_items | rejectattr('resolved') | list %}
+{% set open_blockers = blockers | rejectattr('resolved') | list %}
+{% set open_total = open_questions | length + open_blockers | length %}
 <a class="back" href="/jobs"><svg class="icon"><use href="#i-arrow-left"/></svg>Jobs</a>
 <header class="page-header">
   <div>
@@ -28,14 +30,16 @@
   </div>
 </header>
 
-{% if open_questions %}
+{% if open_total %}
 <div class="callout warn" style="margin-bottom:18px"><svg class="icon"><use href="#i-alert"/></svg>
-  <div><strong>{{ open_questions | length }} question{{ 's' if open_questions | length != 1 }} need your answer</strong> before CareerOps can finish this application. <a class="link" href="#review" data-tab-link>Answer them</a></div></div>
+  <div>{% if open_blockers %}<strong>{{ open_blockers[0].blocker.title }}.</strong> {{ open_blockers[0].blocker.action }}{% endif %}
+    {% if open_questions %}<strong>{{ open_questions | length }} question{{ 's' if open_questions | length != 1 }} need your answer.</strong>{% endif %}
+    <a class="link" href="#review">See details</a></div></div>
 {% endif %}
 
 <div class="tabs" role="tablist" data-tabs aria-label="Job sections">
   <button role="tab" aria-controls="overview" aria-selected="true">Overview</button>
-  <button role="tab" aria-controls="review">Review{% if open_questions %}<span class="n">{{ open_questions | length }}</span>{% endif %}</button>
+  <button role="tab" aria-controls="review">Review{% if open_total %}<span class="n">{{ open_total }}</span>{% endif %}</button>
   <button role="tab" aria-controls="documents">Documents{% if artifacts %}<span class="n" style="color:var(--soft)">{{ artifacts | length }}</span>{% endif %}</button>
   <button role="tab" aria-controls="evidence">Evidence</button>
   <button role="tab" aria-controls="activity">Activity</button>
@@ -96,6 +100,26 @@
 </section>
 
 <section id="review" role="tabpanel" hidden>
+  {% if blockers %}
+  <div class="card warn" style="margin-bottom:18px">
+    <div class="card-head"><div><div class="eyebrow">What stopped the agent</div><h2>Nothing to type here — these need an action</h2>
+      <p>From the last run on this job. They clear automatically the next time it runs, or you can dismiss them.</p></div></div>
+    <div class="card-body flush">
+      {% for item in blockers %}
+      <div class="review-q {{ 'is-done' if item.resolved }}" data-question="{{ item.question }}">
+        <div class="row between"><h3>{{ item.blocker.title }}{% if item.blocker.detail %} <span class="soft" style="font-weight:400">· {{ item.blocker.detail }}</span>{% endif %}</h3>
+          {% if item.resolved %}<span class="badge neutral">Dismissed</span>{% else %}<span class="badge warn">Action</span>{% endif %}</div>
+        <p class="why">{{ item.blocker.why }}</p>
+        <div class="callout" style="margin-bottom:12px"><svg class="icon"><use href="#i-arrow-right"/></svg><div><strong>What to do:</strong> {{ item.blocker.action }}</div></div>
+        <div class="actions">
+          {% if apply_url %}<a class="btn sm" href="{{ apply_url }}" target="_blank" rel="noopener">Open employer page<svg class="icon"><use href="#i-external"/></svg></a>{% endif %}
+          {% if application %}<button class="btn sm ghost" type="button" data-action="dismiss-blocker" data-app="{{ application.id }}">Dismiss</button>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="card">
     <div class="card-head"><div><div class="eyebrow">Your answers</div><h2>Questions CareerOps paused on</h2>
       <p>Answers here are saved for this application. Non-sensitive ones (like “How did you hear about us?”) are reused on future applications automatically.</p></div></div>
@@ -127,7 +151,7 @@
         <div class="actions" style="margin-top:12px"><button class="btn sm primary" type="button" data-action="save-review" data-app="{{ application.id }}"><svg class="icon"><use href="#i-check"/></svg>Save answer</button></div>
       </div>
       {% else %}
-        <div class="empty"><svg class="icon"><use href="#i-check"/></svg><strong>No open questions</strong><span>{% if application %}Every question has an answer.{% else %}Run a dry run to see which questions this form asks.{% endif %}</span></div>
+        <div class="empty"><svg class="icon"><use href="#i-check"/></svg><strong>No questions to answer</strong><span>{% if application %}Nothing on this form is waiting for your answer.{% else %}Run a dry run to see which questions this form asks.{% endif %}</span></div>
       {% endfor %}
     </div>
     {% if open_questions | length < review_items | length and apply_url %}
@@ -139,7 +163,7 @@
 
 <section id="documents" role="tabpanel" hidden>
   <div class="card">
-    <div class="card-head"><div><div class="eyebrow">Application package</div><h2>Tailored documents</h2><p>Built from your master resume and verified evidence. Claims the truth guard couldn't verify are left out.</p></div>
+    <div class="card-head"><div><div class="eyebrow">Application package</div><h2>Tailored documents</h2><p>Built from your master resume and verified evidence. Claims the truth guard couldn't verify are left out.{% if older_artifacts %} Showing the latest version; {{ older_artifacts }} older one{{ 's' if older_artifacts != 1 }} hidden.{% endif %}</p></div>
       <button class="btn sm" type="button" data-action="prepare-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-refresh"/></svg>Regenerate</button></div>
     <div class="card-body flush">
       <div class="list">

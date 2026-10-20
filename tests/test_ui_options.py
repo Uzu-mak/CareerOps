@@ -50,3 +50,14 @@ def test_formatting_helpers():
     assert iso(datetime(2026, 10, 20, 17, 5)) == '2026-10-20T17:05:00+00:00'   # naive treated as UTC
     assert short_dt(dt) == 'Oct 20, 17:05 UTC' and short_dt(None) == '—'
     assert money(165000) == '$165k' and salary_range(170000, 240000) == '$170k – $240k' and salary_range(None, None) == 'Not listed'
+
+
+def test_status_messages_are_explained_not_asked():
+    from careerops.core.ui_options import blocker_info, is_blocker
+    for reason in ['application form not detected', 'CAPTCHA', 'submission confirmation not detected', 'final submission approval',
+                   'portal account password / email verification', 'form error: Email is invalid', 'truth guard - resume: 2 unverified claim(s) withheld']:
+        info = blocker_info(reason)
+        assert info and info['title'] and info['action'], reason
+    assert blocker_info('form error: Email is invalid')['detail'] == 'Email is invalid'
+    for question in ['Why do you want to work here?', 'Gender', 'Voluntary self-identification of disability']:
+        assert not is_blocker(question)

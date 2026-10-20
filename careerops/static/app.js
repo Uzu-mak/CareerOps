@@ -276,6 +276,12 @@
       toast(x.remaining ? `${x.remaining} question(s) left` : 'All questions answered — run the application again.', { title: 'Answer saved' });
       if (!x.remaining) reload(1200);
     },
+    async 'dismiss-blocker'(btn) {
+      const card = btn.closest('.review-q');
+      const x = await api(`/api/applications/${btn.dataset.app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer: 'dismissed', notes: 'dismissed in review', resolved: 'true' } });
+      card.classList.add('is-done'); btn.remove();
+      toast(x.remaining ? `${x.remaining} item(s) left` : 'Nothing left to review', { title: 'Dismissed' });
+    },
     async 'check-proof'(btn) {
       const x = await api(`/api/applications/${btn.dataset.id}/verification`);
       const msg = { CONFIRMED: `Employer confirmation captured${x.confirmation_term ? ` (“${x.confirmation_term}”)` : ''}.`, UNVERIFIED: 'Marked submitted, but no employer confirmation was captured.', REVIEW: `Waiting on: ${(x.manual_fields || []).join(', ') || 'your review'}.` }[x.state] || 'Not submitted yet.';
