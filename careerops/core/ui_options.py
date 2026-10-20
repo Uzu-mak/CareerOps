@@ -5,7 +5,7 @@ HTML and the API validates against the same values.
 """
 from __future__ import annotations
 
-from careerops.agents.apply_plan import classify
+from careerops.agents.apply_plan import PROFILE_FACTS, classify
 import re
 
 from careerops.agents.jd_analysis import SKILL_LIBRARY
@@ -109,6 +109,8 @@ def review_input(question: str, plan: dict | None = None) -> dict:
         return {**spec, 'kind': 'select', 'options': ['Decline to self-identify'], 'free': True}
     if cat == 'salary':
         return {**spec, 'kind': 'number'}
+    if cat in PROFILE_FACTS:      # a fact like an address is one line, even when the form uses a big box
+        return {**spec, 'kind': 'text', 'profile_fact': PROFILE_FACTS[cat]}
     if ftype == 'textarea' or spec['words'] or (cat in {'motivation', 'question'} and len(question) > 60):
         return {**spec, 'kind': 'textarea'}
     return {**spec, 'kind': 'text'}

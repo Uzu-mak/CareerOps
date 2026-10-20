@@ -467,7 +467,7 @@
     async 'profile-identity'(f) {
       await saveProfile({
         full_name: fieldValue(f, 'full_name'), preferred_name: fieldValue(f, 'preferred_name') || null, email: fieldValue(f, 'email') || null,
-        phone: fieldValue(f, 'phone') || null, home_location: fieldValue(f, 'home_location') || null,
+        phone: fieldValue(f, 'phone') || null, home_location: fieldValue(f, 'home_location') || null, street_address: fieldValue(f, 'street_address') || null,
         linkedin_url: fieldValue(f, 'linkedin_url') || null, github_url: fieldValue(f, 'github_url') || null,
       });
       toast('Identity saved');

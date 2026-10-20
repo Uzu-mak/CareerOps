@@ -77,7 +77,8 @@
         <div class="field"><label for="f-home">Home location</label><input class="input" id="f-home" name="home_location" value="{{ profile.home_location or '' }}" list="locationOptions" placeholder="Seattle, WA"></div>
         <div class="field"><label for="f-li">LinkedIn URL</label><input class="input" id="f-li" name="linkedin_url" type="url" value="{{ profile.linkedin_url or '' }}" placeholder="https://www.linkedin.com/in/…" pattern="https://(www\.)?linkedin\.com/.+">
           {% if profile.linkedin_url and 'your-name' in profile.linkedin_url %}<span class="hint" style="color:var(--warm)">This still looks like a placeholder.</span>{% endif %}</div>
-        <div class="field full"><label for="f-gh">GitHub URL</label><input class="input" id="f-gh" name="github_url" type="url" value="{{ profile.github_url or '' }}" placeholder="https://github.com/…"></div>
+        <div class="field"><label for="f-gh">GitHub URL</label><input class="input" id="f-gh" name="github_url" type="url" value="{{ profile.github_url or '' }}" placeholder="https://github.com/…"></div>
+        <div class="field full"><label for="f-addr">Mailing address</label><input class="input" id="f-addr" name="street_address" value="{{ profile.street_address or '' }}" autocomplete="street-address" placeholder="123 Main St, Apt 4, Seattle, WA 98101"><span class="hint">Only used when a form asks for your address.</span></div>
       </div>
       <div class="card-foot"><span class="soft">Filled into every application form.</span><button class="btn primary" type="submit">Save identity</button></div>
     </form>

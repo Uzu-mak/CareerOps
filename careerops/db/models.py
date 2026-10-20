@@ -19,6 +19,7 @@ class CandidateProfile(Base):
     email: Mapped[str | None] = mapped_column(String(220), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
     home_location: Mapped[str | None] = mapped_column(String(220), nullable=True)
+    street_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     github_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 

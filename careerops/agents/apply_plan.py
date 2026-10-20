@@ -113,8 +113,15 @@ PROFILE_RULES: list[tuple[str, str]] = [
     ('linkedin', r'\blinked ?in\b'),
     ('github', r'\bgit ?hub\b'),
     ('portfolio', r'\b(portfolio|personal (web ?)?site|website|web site|blog)\b'),
+    ('address', r'^(your )?(street |mailing |home |full |current |postal )?address( line 1)?$|\b(mailing|street|home|postal|residential) address\b'),
     ('location', r'^(current )?(location|city)( city)?$|\b(current location|where are you (currently )?(located|based)|city of residence|city and state|location \(city\))\b'),
 ]
+
+PROFILE_FACTS = {'preferred_name': 'preferred name', 'first_name': 'name', 'last_name': 'name', 'full_name': 'name', 'email': 'email',
+                 'phone': 'phone', 'linkedin': 'LinkedIn URL', 'github': 'GitHub URL', 'portfolio': 'portfolio link',
+                 'location': 'home location', 'address': 'mailing address', 'school': 'school (Education)', 'degree': 'degree (Education)',
+                 'major': 'major (Education)', 'grad_year': 'graduation year (Education)', 'gpa': 'GPA (Education)',
+                 'high_school': 'high school (Education)', 'hs_year': 'high-school graduation year (Education)'}
 
 
 def classify(label: str) -> str:
@@ -158,6 +165,7 @@ class Facts:
     github: str | None = None
     portfolio: str | None = None
     location: str | None = None
+    address: str | None = None
     legal_verified: bool = False
     authorized: bool | None = None
     sponsor_now: bool | None = None
@@ -195,7 +203,7 @@ def build_facts(profile, extra_links=None, approved_answers=None, answer_bank=No
         linkedin=getattr(profile, 'linkedin_url', None),
         github=getattr(profile, 'github_url', None),
         portfolio=portfolio,
-        location=getattr(profile, 'home_location', None),
+        location=getattr(profile, 'home_location', None), address=getattr(profile, 'street_address', None),
         legal_verified=verified,
         authorized=getattr(profile, 'authorized_to_work_us', None) if verified else None,
         sponsor_now=getattr(profile, 'requires_current_sponsorship', None) if verified else None,
@@ -271,7 +279,7 @@ def answer_for(field_: dict, facts: Facts) -> tuple[Answer | None, str]:
         'first_name': facts.first_name, 'last_name': facts.last_name, 'full_name': facts.full_name,
         'preferred_name': facts.preferred_name, 'email': facts.email, 'phone': facts.phone,
         'linkedin': facts.linkedin, 'github': facts.github, 'portfolio': facts.portfolio,
-        'location': facts.location,
+        'location': facts.location, 'address': facts.address,
         'school': facts.school, 'degree': facts.degree, 'major': facts.major, 'grad_year': facts.grad_year,
         'gpa': facts.gpa, 'high_school': facts.high_school, 'hs_year': facts.hs_year,
     }
@@ -502,6 +510,8 @@ def _reason(cat: str, facts: Facts) -> str:
         return 'voluntary EEO question; set an EEO preference or answer it'
     if cat in SENSITIVE:
         return f'{cat} question requires your answer'
+    if cat in PROFILE_FACTS:
+        return f'not on your Profile yet. Add your {PROFILE_FACTS[cat]} on Profile and every form gets it'
     return 'required question with no saved answer'
 
 

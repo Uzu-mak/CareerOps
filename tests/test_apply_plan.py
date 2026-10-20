@@ -205,3 +205,11 @@ def test_work_authorization_answered_in_sentences():
     two = ['I am authorized for any employer', 'I am authorized for my present employer only']
     plan = plan_application([field(q, 'select', True, options=two)], build_facts(profile(requires_future_sponsorship=None, requires_current_sponsorship=None)))
     assert plan.actions == [] and plan.unresolved   # ambiguous: you decide
+
+
+def test_address_comes_from_the_profile_and_is_not_confused_with_email():
+    facts = build_facts(profile(street_address='123 Main St, Seattle, WA 98101'))
+    got = ops(plan_application([field('Address', 'textarea', True), field('Email address', required=True)], facts))
+    assert got == {'Address': ('fill', '123 Main St, Seattle, WA 98101'), 'Email address': ('fill', 'ada@example.com')}
+    plan = plan_application([field('Address', 'textarea', True)], build_facts(profile()))
+    assert 'mailing address' in plan.unresolved[0]['reason']

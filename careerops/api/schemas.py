@@ -7,6 +7,7 @@ class ProfileUpdate(BaseModel):
     email: str | None=None
     phone: str | None=None
     home_location: str | None=None
+    street_address: str | None=None
     linkedin_url: str | None=None
     github_url: str | None=None
     role_families: list[str]=Field(default_factory=list)

@@ -31,6 +31,7 @@ def test_review_questions_get_the_right_control():
     assert review_input('What are your salary expectations?')['kind'] == 'number'
     assert review_input('Why do you want to work at Initech? Please tell us in a few sentences.')['kind'] == 'textarea'
     assert review_input('Current company')['kind'] == 'text'
+    assert review_input('Address', {'field_type': 'textarea'})['kind'] == 'text'   # a fact, not an essay
 
 
 def test_option_lists_are_consistent():

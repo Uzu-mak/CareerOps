@@ -49,6 +49,7 @@ def _ensure_schema_compatibility():
         "ALTER TABLE job_postings ALTER COLUMN location TYPE TEXT",
         "ALTER TABLE source_configs ADD COLUMN IF NOT EXISTS discovered_from VARCHAR(80)",
         "ALTER TABLE runtime_settings ADD COLUMN IF NOT EXISTS auto_draft_essays BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS street_address TEXT",
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_school VARCHAR(220)",
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_degree VARCHAR(80)",
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(160)",

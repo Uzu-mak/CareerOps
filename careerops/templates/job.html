@@ -143,7 +143,7 @@
       {% for item in review_items %}
       <div class="review-q {{ 'is-done' if item.resolved }}" data-question="{{ item.question }}">
         <div class="row between"><h3>{{ item.question }}</h3>{% if item.resolved %}<span class="badge good">Answered</span>{% else %}<span class="badge warn">Needs answer</span>{% endif %}</div>
-        <p class="why">{% if item.not_accepted %}{{ item.reason }}{% elif item.field_type and item.input.options and item.input.kind in ('select', 'multi') and item.field_type != 'checkbox' %}{{ job.company }}'s form asks this and CareerOps has no saved answer. Choose from the form's own options.{% else %}{{ item.reason }}{% endif %}</p>
+        <p class="why">{% if item.not_accepted %}{{ item.reason }}{% elif item.field_type and item.input.options and item.input.kind in ('select', 'multi') and item.field_type != 'checkbox' %}{{ job.company }}'s form asks this and CareerOps has no saved answer. Choose from the form's own options.{% elif item.input.profile_fact %}Not on your Profile yet. Answer it here for this job, or <a href="/profile#identity">add your {{ item.input.profile_fact }} to your Profile</a> and every form gets it.{% else %}{{ item.reason }}{% endif %}</p>
         <div class="form-grid">
           <div class="field {{ 'full' if item.input.kind in ('textarea',) }}">
             <label for="ans-{{ loop.index }}">Answer</label>
