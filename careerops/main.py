@@ -28,7 +28,12 @@ AUTH_CONFIG.validate()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_all(); seed_demo_data(); yield
+    create_all(); seed_demo_data()
+    # Uvicorn logs the container bind address (0.0.0.0:8000), which a browser
+    # cannot open. Print the address people should actually use.
+    print(f'\n  CareerOps is ready: open {settings.base_url.rstrip("/")} in your browser\n'
+          f'  (the "0.0.0.0:8000" line below is the address inside the container)\n', flush=True)
+    yield
 
 app=FastAPI(title='CareerOps',version='3.1.0',lifespan=lifespan)
 app.add_middleware(AuthMiddleware, config=AUTH_CONFIG)

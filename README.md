@@ -105,12 +105,17 @@ LinkedIn/Indeed alert emails can be ingested manually or through optional IMAP p
 
 ## Windows + Docker quick start
 
-From the extracted project folder:
+Start Docker Desktop, then from the project folder:
 
 ```bat
 copy .env.example .env
-docker compose up --build
+notepad .env
+start_careerops.bat
 ```
+
+`start_careerops.bat` builds and starts everything in the background, waits until CareerOps answers, and opens it in your browser. `stop_careerops.bat` stops it; `docker compose logs -f app` shows the log.
+
+The log line `Uvicorn running on http://0.0.0.0:8000` is the address *inside* the container; open `http://localhost:8001` instead.
 
 Open:
 
