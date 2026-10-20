@@ -273,8 +273,22 @@
       if (!String(answer || '').trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
       const x = await api(`/api/applications/${btn.dataset.app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
       card.classList.add('is-done');
-      toast(x.remaining ? `${x.remaining} question(s) left` : 'All questions answered — run the application again.', { title: 'Answer saved' });
-      if (!x.remaining) reload(1200);
+      const left = $$('.review-q:not(.is-done) [name=answer]').length;
+      if (left) { toast(`${left} question(s) left`, { title: 'Answer saved' }); return; }
+      toast('Every question is answered.', { title: 'Answer saved' });
+      const jobId = document.querySelector('[data-action="apply"]')?.dataset.id;
+      if (!jobId) { reload(1200); return; }
+      const go = await confirmDialog({ title: 'Apply again now?', body: 'CareerOps will run the application again with your new answers. It still stops instead of submitting if anything new comes up.', ok: 'Apply now' });
+      if (!go) { reload(300); return; }
+      const t = toast('Filling and submitting with your answers…', { title: 'Applying', timeout: 0 });
+      try { const r = await api(`/api/jobs/${jobId}/apply-live`, { method: 'POST', query: { submit: true } }); t.remove(); showResult(r); }
+      catch (e) { t.remove(); fail(e, 'Apply failed'); }
+    },
+    async 'mark-applied'(btn) {
+      const ok = await confirmDialog({ title: 'Mark as applied?', body: 'Use this after you have submitted the application on the employer site. It is tracked as Submitted (unverified, since CareerOps did not see the confirmation).', ok: 'Mark as applied' });
+      if (!ok) return;
+      await api(`/api/jobs/${btn.dataset.id}/mark-applied`, { method: 'POST' });
+      toast('Tracked on the Applications page', { title: 'Marked as applied' }); reload(900);
     },
     async 'dismiss-blocker'(btn) {
       const card = btn.closest('.review-q');
@@ -532,7 +546,7 @@
         <td class="hide-sm">${esc(j.location || '—')}${j.workplace_type ? ` <span class="badge neutral">${esc(j.workplace_type)}</span>` : ''}</td>
         <td>${j.fit_score === null ? '<span class="soft">—</span>' : `<span class="fit ${fitClass(j.fit_score)}"><span class="fit-bar"><i style="width:${j.fit_score}%"></i></span>${j.fit_score}%</span>`}</td>
         <td class="nowrap">${j.action ? `<span class="badge ${j.action.toLowerCase()}">${esc(j.action)}</span> <span class="soft mono">${esc(j.priority || '')}</span>` : '<span class="badge neutral">Not analyzed</span>'}</td>
-        <td class="hide-sm">${j.application_status ? `<span class="badge info">${esc(j.application_status)}</span>` : '<span class="soft">—</span>'}</td>
+        <td class="hide-sm">${j.application_status ? `<span class="badge info">${esc(j.application_status)}</span>` : j.apply_mode === 'auto' ? '<span class="badge good" title="The browser agent can fill this form">auto-apply</span>' : '<span class="badge neutral" title="Requires signing in on the employer site">apply yourself</span>'}</td>
         <td class="hide-sm soft"><time datetime="${esc(j.first_seen_at || '')}" data-relative></time></td>
         <td class="actions-cell"><a class="btn sm" href="/jobs/${j.id}">Open</a></td>
       </tr>`;

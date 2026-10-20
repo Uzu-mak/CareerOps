@@ -42,6 +42,12 @@
         <option value="">All companies</option>
         {% for c in facets.companies %}<option value="{{ c.name }}">{{ c.name }} ({{ c.count }})</option>{% endfor %}
       </select></label>
+    <label><span class="sr-only">How to apply</span>
+      <select class="select" name="apply_mode">
+        <option value="">Any site</option>
+        <option value="auto">Auto-apply works</option>
+        <option value="manual">Apply yourself</option>
+      </select></label>
     <label><span class="sr-only">Sort</span>
       <select class="select" name="sort" data-default="fit">
         {% for v, label in ui.job_sorts %}<option value="{{ v }}">{{ label }}</option>{% endfor %}
@@ -51,6 +57,7 @@
   <div class="toolbar" style="padding-top:10px;padding-bottom:10px">
     <div class="filter-chips">
       <button type="button" data-preset="decision=APPLY">Apply-ready</button>
+      <button type="button" data-preset="apply_mode=auto">Auto-apply works</button>
       <button type="button" data-preset="min_fit=80">80%+ fit</button>
       <button type="button" data-preset="workplace=remote">Remote</button>
       <button type="button" data-preset="decision=UNANALYZED">Not analyzed</button>

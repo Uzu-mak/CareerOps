@@ -6,6 +6,7 @@ from math import ceil
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from careerops.core.ui_options import apply_mode as apply_mode_for
 from careerops.db.models import Application, JobAnalysis, JobPosting
 
 PAGE_SIZE = 25
@@ -21,9 +22,15 @@ def _latest_application_ids():
             .group_by(Application.job_id).subquery())
 
 
+def _auto_apply_clause():
+    from careerops.core.ui_options import AUTO_APPLY_ATS, AUTO_APPLY_HOSTS
+    urls = [col.ilike(f'%{h}%') for h in AUTO_APPLY_HOSTS for col in (JobPosting.application_url, JobPosting.canonical_url)]
+    return or_(JobPosting.ats.in_(sorted(AUTO_APPLY_ATS)), *urls)
+
+
 def search_jobs(db: Session, q: str = '', decision: str = '', priority: str = '', workplace: str = '',
                 company: str = '', min_fit: int = 0, sort: str = 'fit', page: int = 1,
-                page_size: int = PAGE_SIZE) -> dict:
+                page_size: int = PAGE_SIZE, apply_mode: str = '') -> dict:
     la, lp = _latest_analysis_ids(), _latest_application_ids()
 
     def filtered(*columns):
@@ -46,6 +53,10 @@ def search_jobs(db: Session, q: str = '', decision: str = '', priority: str = ''
             stmt = stmt.where(JobPosting.company == company)
         if min_fit:
             stmt = stmt.where(JobAnalysis.fit_score >= min_fit)
+        if apply_mode == 'auto':
+            stmt = stmt.where(_auto_apply_clause())
+        elif apply_mode == 'manual':
+            stmt = stmt.where(~_auto_apply_clause())
         return stmt
 
     total = db.scalar(filtered(func.count(JobPosting.id))) or 0
@@ -67,6 +78,7 @@ def search_jobs(db: Session, q: str = '', decision: str = '', priority: str = ''
             'first_seen_at': job.first_seen_at.isoformat() if job.first_seen_at else None,
             'salary_min': job.salary_min, 'salary_max': job.salary_max,
             'has_application_url': bool(job.application_url or job.canonical_url),
+            'apply_mode': apply_mode_for(job.application_url or job.canonical_url, job.ats),
             'fit_score': round(analysis.fit_score) if analysis else None,
             'priority': analysis.priority if analysis else None,
             'action': analysis.recommended_action if analysis else None,

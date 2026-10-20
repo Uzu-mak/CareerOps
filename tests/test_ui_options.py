@@ -61,3 +61,13 @@ def test_status_messages_are_explained_not_asked():
     assert blocker_info('form error: Email is invalid')['detail'] == 'Email is invalid'
     for question in ['Why do you want to work here?', 'Gender', 'Voluntary self-identification of disability']:
         assert not is_blocker(question)
+
+
+def test_apply_mode_separates_agent_portals_from_sign_in_portals():
+    from careerops.core.ui_options import apply_mode
+    assert apply_mode('https://jobs.lever.co/palantir/123') == 'auto'
+    assert apply_mode('https://jobs.ashbyhq.com/openai/abc/application') == 'auto'
+    assert apply_mode('https://www.stripe.com/jobs?gh_jid=1', 'greenhouse') == 'auto'   # Greenhouse embed on a company site
+    assert apply_mode('https://www.metacareers.com/jobs/1', 'company_career') == 'manual'
+    assert apply_mode('https://amazon.jobs/en/jobs/1') == 'manual'
+    assert apply_mode(None) == 'manual'

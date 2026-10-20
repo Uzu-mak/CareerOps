@@ -20,7 +20,7 @@ from careerops.agents.account import account_plan
 from careerops.services.notifications import get_notification_preferences
 from careerops.services.imap_alerts import imap_configured
 from careerops.services.job_search import job_facets, pending_analysis_count
-from careerops.core.ui_options import as_template_globals, blocker_info, detect_skills, review_input, suggest_roles
+from careerops.core.ui_options import apply_mode, as_template_globals, blocker_info, detect_skills, review_input, suggest_roles
 from careerops.web.view_helpers import iso, money, salary_range, setup_checklist, short_dt
 
 from careerops.core.auth import AuthConfig, AuthMiddleware
@@ -123,7 +123,7 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
         latest.setdefault(a.artifact_type, a)
     older_artifacts=len(artifacts)-len(latest)
     artifacts=list(latest.values())
-    return _render(request, db, 'job.html', profile=profile, job=job, analysis=analysis, application=app_row, artifacts=artifacts,
+    return _render(request, db, 'job.html', profile=profile, job=job, apply_mode=apply_mode(job.application_url or job.canonical_url, job.ats), analysis=analysis, application=app_row, artifacts=artifacts,
                    runs=runs, review_items=review_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
                    verification=submission_evidence_summary(app_row) if app_row else None)
 

@@ -115,6 +115,23 @@ def _skill_pattern(skill: str) -> re.Pattern:
 _PATTERNS = None
 
 
+AUTO_APPLY_HOSTS = ('greenhouse.io', 'lever.co', 'ashbyhq.com')
+AUTO_APPLY_ATS = {'greenhouse', 'lever', 'ashby'}
+
+
+def apply_mode(url: str | None, ats: str | None = None) -> str:
+    """'auto' when the browser agent can fill this portal's form, else 'manual'.
+
+    Greenhouse, Lever and Ashby forms are public and tested. Big-company career
+    portals (Workday, Meta, Amazon, Microsoft, ...) require signing in to their
+    own account system first, so the agent stops before any form appears.
+    """
+    low = (url or '').lower()
+    if (ats or '').lower() in AUTO_APPLY_ATS or any(h in low for h in AUTO_APPLY_HOSTS):
+        return 'auto'
+    return 'manual'
+
+
 # Review reasons that are not questions: what stopped the agent, why, and what to do.
 # (prefix match, title, explanation, suggested action)
 BLOCKERS = [

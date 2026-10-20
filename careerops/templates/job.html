@@ -18,19 +18,28 @@
     </p>
   </div>
   <div class="actions">
-    {% if apply_url %}<a class="btn ghost" href="{{ apply_url }}" target="_blank" rel="noopener">Employer page<svg class="icon"><use href="#i-external"/></svg></a>{% endif %}
     <button class="btn" type="button" data-action="analyze-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-refresh"/></svg>{{ 'Re-analyze' if analysis else 'Analyze' }}</button>
     <button class="btn" type="button" data-action="prepare-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-file"/></svg>Prepare documents</button>
-    {% if apply_url %}
+    {% if apply_url and apply_mode == 'auto' %}
+      <a class="btn ghost" href="{{ apply_url }}" target="_blank" rel="noopener">Employer page<svg class="icon"><use href="#i-external"/></svg></a>
       <button class="btn" type="button" data-action="dry-run" data-id="{{ job.id }}" title="Fill the form without submitting"><svg class="icon"><use href="#i-eye"/></svg>Dry run</button>
       <button class="btn primary" type="button" data-action="apply" data-id="{{ job.id }}"><svg class="icon"><use href="#i-send"/></svg>Apply</button>
+    {% elif apply_url %}
+      <button class="btn" type="button" data-action="mark-applied" data-id="{{ job.id }}"><svg class="icon"><use href="#i-check"/></svg>Mark as applied</button>
+      <a class="btn primary" href="{{ apply_url }}" target="_blank" rel="noopener">Apply on employer site<svg class="icon"><use href="#i-external"/></svg></a>
     {% else %}
       <button class="btn primary" type="button" disabled title="This job has no application link">No application link</button>
     {% endif %}
   </div>
 </header>
 
-{% if open_total %}
+{% if apply_url and apply_mode == 'manual' %}
+<div class="callout" style="margin-bottom:18px"><svg class="icon"><use href="#i-info"/></svg>
+  <div><strong>Apply to this one yourself.</strong> {{ job.company }}'s careers site makes you sign in to its own portal before showing a form, so the browser agent can't fill it.
+    Use <strong>Prepare documents</strong> for a tailored resume and cover letter, apply on their site, then click <strong>Mark as applied</strong> so it's tracked.
+    Auto-apply works on Greenhouse, Lever and Ashby forms — <a class="link" href="/jobs?apply_mode=auto">see those jobs</a>.</div></div>
+{% endif %}
+{% if open_total and apply_mode == 'auto' %}
 <div class="callout warn" style="margin-bottom:18px"><svg class="icon"><use href="#i-alert"/></svg>
   <div>{% if open_blockers %}<strong>{{ open_blockers[0].blocker.title }}.</strong> {{ open_blockers[0].blocker.action }}{% endif %}
     {% if open_questions %}<strong>{{ open_questions | length }} question{{ 's' if open_questions | length != 1 }} need your answer.</strong>{% endif %}

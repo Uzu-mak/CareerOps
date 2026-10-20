@@ -107,8 +107,21 @@ def jobs(db:Session=Depends(get_db)):
 
 @router.get('/jobs/search')
 def jobs_search(q:str='', decision:str='', priority:str='', workplace:str='', company:str='', min_fit:int=Query(0,ge=0,le=100),
-                sort:str='fit', page:int=Query(1,ge=1), page_size:int=Query(25,ge=5,le=100), db:Session=Depends(get_db)):
-    return search_jobs(db,q=q,decision=decision,priority=priority,workplace=workplace,company=company,min_fit=min_fit,sort=sort,page=page,page_size=page_size)
+                sort:str='fit', page:int=Query(1,ge=1), page_size:int=Query(25,ge=5,le=100), apply_mode:str='', db:Session=Depends(get_db)):
+    return search_jobs(db,q=q,decision=decision,priority=priority,workplace=workplace,company=company,min_fit=min_fit,sort=sort,page=page,page_size=page_size,apply_mode=apply_mode)
+
+@router.post('/jobs/{job_id}/mark-applied')
+def mark_applied(job_id:int, db:Session=Depends(get_db)):
+    """You applied on the employer's site yourself: track it (shown as Unverified, since there is no browser proof)."""
+    j=db.get(JobPosting,job_id)
+    if not j: raise HTTPException(404,'Job not found')
+    app=db.scalar(select(Application).where(Application.job_id==job_id).order_by(Application.created_at.desc()).limit(1))
+    if not app:
+        app=Application(job_id=job_id,status='submitted',portal=detect_portal(j.application_url or j.canonical_url),mode='MANUAL'); db.add(app)
+    app.status='submitted'; app.mode='MANUAL'; app.submitted_at=datetime.now(timezone.utc)
+    app.requires_human_review=False; app.human_review_reasons=[]
+    db.commit(); db.refresh(app)
+    return {'ok':True,'application_id':app.id}
 
 @router.get('/jobs/facets')
 def jobs_facets(db:Session=Depends(get_db)):
