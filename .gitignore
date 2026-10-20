@@ -45,3 +45,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Deployment values (real ones stay local)
+deploy/gcp/env.yaml

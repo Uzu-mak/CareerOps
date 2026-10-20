@@ -195,9 +195,23 @@ docker compose down
 
 Do **not** use `docker compose down -v` during upgrades unless you intentionally want to delete your PostgreSQL data.
 
-## AWS architecture
+## Hosting on Google Cloud
 
-The Terraform configuration defines the production topology:
+[`docs/deploy-gcp.md`](docs/deploy-gcp.md) deploys CareerOps to Cloud Run:
+
+- the app runs as a Cloud Run service, with Chromium for the apply agent;
+- discovery runs as a Cloud Run job triggered every 15 minutes by Cloud Scheduler;
+- files live in a Cloud Storage bucket mounted at `/data`;
+- PostgreSQL is Neon's free tier or Cloud SQL;
+- keys are kept in Secret Manager.
+
+**Login.** A hosted copy is protected by Google sign-in limited to the accounts in `ALLOWED_EMAILS` (`AUTH_MODE=google`). On your own machine, `AUTH_MODE=none` with `ENVIRONMENT=local` needs no login. CareerOps refuses to start with no login anywhere else, so a misconfigured deployment fails closed instead of exposing your resume and work-authorization answers. Scripts can call the API with `Authorization: Bearer <API_TOKEN>`.
+
+Vercel is not a good fit: the apply agent needs a real Chromium and runs for minutes, discovery is a scheduled worker, and documents need persistent storage.
+
+## AWS architecture (alternative)
+
+The Terraform in `infra/terraform` defines an AWS topology:
 
 - ECS/Fargate FastAPI service
 - separate discovery worker
@@ -239,6 +253,7 @@ See `FEATURE_MATRIX.md` for what is implemented, what needs credentials, and wha
 
 ## Changelog
 
+- **Hosting.** Google sign-in for hosted instances (fails closed without it), Cloud Run guide, `$PORT` support, `.dockerignore` so `.env` is never baked into images, Compose reads `.env` directly.
 - **Browser agent rebuild.** Frame-aware form scanning, answer planning, React-Select/autocomplete/Yes-No button support, Lever/Ashby/Greenhouse-embed entry, required-question pauses with exact question text, answer bank, EEO decline preference, visible-only CAPTCHA detection, and confirmation that must appear after submit.
 - **LLM job-description extraction** (OpenAI or Bedrock), validated and merged with rules.
 - **Truth guard on documents.** Unsupported claims are withheld from resumes and cover letters, and block unattended submission.

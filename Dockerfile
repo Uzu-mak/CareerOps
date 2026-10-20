@@ -5,4 +5,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 ENV CHROMIUM_EXECUTABLE=/usr/bin/chromium
-CMD ["uvicorn","careerops.main:app","--host","0.0.0.0","--port","8000"]
+# Cloud Run sets $PORT; Docker Compose uses the 8000 default.
+CMD ["sh","-c","exec uvicorn careerops.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*"]

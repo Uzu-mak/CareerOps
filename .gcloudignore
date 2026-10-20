@@ -1,0 +1,18 @@
+# Files uploaded to Cloud Build by `gcloud builds submit`
+# Never bake secrets, local data or build junk into the image
+.env
+.env.*
+!.env.example
+.git
+**/__pycache__
+*.db
+*.sqlite*
+careerops/uploads/*
+careerops/generated/*
+frontend/node_modules
+frontend/.next
+.terraform
+*.tfstate*
+deploy/gcp/env.yaml
+.github
+tests/fixtures

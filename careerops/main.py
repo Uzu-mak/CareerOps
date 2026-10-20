@@ -20,11 +20,18 @@ from careerops.agents.account import account_plan
 from careerops.services.notifications import get_notification_preferences
 from careerops.services.imap_alerts import imap_configured
 
+from careerops.core.auth import AuthConfig, AuthMiddleware
+
+# Fail at startup, before anything is served, if a hosted instance has no login.
+AUTH_CONFIG=AuthConfig.from_settings(settings)
+AUTH_CONFIG.validate()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_all(); seed_demo_data(); yield
 
-app=FastAPI(title='CareerOps',version='3.0.0',lifespan=lifespan)
+app=FastAPI(title='CareerOps',version='3.1.0',lifespan=lifespan)
+app.add_middleware(AuthMiddleware, config=AUTH_CONFIG)
 app.include_router(api_router)
 app.mount('/static',StaticFiles(directory='careerops/static'),name='static')
 templates=Jinja2Templates(directory='careerops/templates')

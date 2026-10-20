@@ -60,6 +60,9 @@ What is implemented, what needs credentials, and what is intentionally out of sc
 | CloudWatch | ✅ infrastructure | ECS log group and per-service streams |
 | Secrets Manager + KMS | ✅ infrastructure | Runtime secrets stored in KMS-encrypted Secrets Manager secret; S3/RDS encrypted |
 | Local Docker execution | ✅ | PostgreSQL + API + Watchtower |
+| Login for hosted instances | ✅ | Google sign-in limited to `ALLOWED_EMAILS`; signed session cookie; bearer `API_TOKEN` for scripts; startup refused without login outside `ENVIRONMENT=local` |
+| Google Cloud Run hosting | ✅ guide | Service + scheduled discovery job + Cloud Storage volume + Secret Manager (`docs/deploy-gcp.md`) |
+| Multi-user accounts | ❌ not yet | Single-user by design; others deploy their own copy |
 | Continuous operation with laptop off | ✅ after AWS deploy | Local scans stop if Docker/laptop stops; AWS workers continue independently |
 
 ## External validation boundary

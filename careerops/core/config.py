@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     browser_headless: bool = True
     chromium_executable: str = '/usr/bin/chromium'
     secret_key: str = 'replace-me-in-production'
+    # Login: 'none' (local only) or 'google' (hosted). See careerops/core/auth.py.
+    auth_mode: str = 'none'
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    allowed_emails: str = ''
+    api_token: str | None = None
+    session_hours: int = 12
     generated_dir: str = 'careerops/generated'
     uploads_dir: str = 'careerops/uploads'
     demo_full_name: str = 'CareerOps User'
