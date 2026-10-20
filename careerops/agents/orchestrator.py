@@ -63,7 +63,11 @@ def prepare_application(db: Session, job: JobPosting) -> dict:
     with agent_run(db,'CoverLetterAgent',job_id=job.id,application_id=app.id,input_summary='mission-aligned cover letter from verified evidence') as run:
         letter=build_cover_letter(db,profile,job,analysis,app); run.output_summary=letter.file_path
     with agent_run(db,'ApplicationQAAgent',job_id=job.id,application_id=app.id,input_summary='profile/rule/legal answer plan') as run:
-        answers=build_standard_application_answers(profile,job)
+        # Keep what earlier runs learned about the real form (its questions, options, your answers).
+        previous=dict(app.answers or {})
+        answers=dict(previous)
+        for q,a in build_standard_application_answers(profile,job).items():
+            answers[q]={**(previous.get(q) or {}),**a}
         resolved_rows=db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app.id, ApplicationReviewAnswer.resolved==True)).all()
         resolved={r.question:r.answer for r in resolved_rows}
         for q,answer in resolved.items():
@@ -71,7 +75,11 @@ def prepare_application(db: Session, job: JobPosting) -> dict:
             plan.update({'mode':'USER_VERIFIED','answer':answer,'reason':'Explicitly provided by the user for this application.','user_resolved':True})
             answers[q]=plan
         app.answers=answers
-        review=[q for q,a in answers.items() if a['mode'] in ['MANUAL','REVIEW'] and q not in resolved]
+        if '_submission_evidence' in previous:
+            # The form has been seen: its questions are the review list, not a generic guess.
+            review=[q for q in (app.human_review_reasons or []) if q not in resolved]
+        else:
+            review=[q for q,a in answers.items() if isinstance(a,dict) and a.get('mode') in ['MANUAL','REVIEW'] and q not in resolved]
         app.human_review_reasons=review; app.requires_human_review=bool(review); db.add(app); db.commit(); run.output_summary=f'{len(answers)} answers; {len(review)} review'
     with agent_run(db,'OutreachAgent',job_id=job.id,application_id=app.id,input_summary='short recruiter outreach') as run:
         text=draft_outreach(profile,job,analysis)

@@ -71,15 +71,51 @@ def record_browser_result(db: Session, app: Application, result) -> Application:
     else:
         app.status = 'review' if result.manual_fields else 'prepared'
         app.requires_human_review = bool(result.manual_fields)
-        # Questions stay until answered; status blockers from an earlier run are replaced by this run's.
-        from careerops.core.ui_options import is_blocker
-        kept = [r for r in (app.human_review_reasons or []) if not is_blocker(r)]
-        app.human_review_reasons = list(dict.fromkeys(kept + list(result.manual_fields or [])))
+        app.human_review_reasons = next_review_queue(app.human_review_reasons, answers, result)
+        _reopen_answers_that_did_not_stick(db, app, result)
 
     db.add(app)
     db.commit()
     db.refresh(app)
     return app
+
+
+def next_review_queue(previous, answers: dict, result) -> list[str]:
+    """What still needs you after a browser run.
+
+    The run is the authority: whatever it filled is done and whatever it lists is open.
+    Only when it stopped early (CAPTCHA, sign-in, an earlier page) do form questions from
+    an earlier run that this run never reached stay on the list.
+    """
+    from careerops.core.ui_options import is_blocker
+    now = list(dict.fromkeys(result.manual_fields or []))
+    if not any(is_blocker(m) for m in now):
+        return now
+    filled = set(result.filled_fields or [])
+    carried = [q for q in (previous or []) if not is_blocker(q) and q not in filled and q not in now
+               and isinstance(answers.get(q), dict) and 'field_type' in answers[q]]   # seen on the real form
+    return list(dict.fromkeys(now + carried))
+
+
+def _reopen_answers_that_did_not_stick(db, app: Application, result) -> None:
+    """You answered it, CareerOps typed it, but the form still shows it empty: say so instead of hiding it."""
+    if not result.manual_fields:
+        return
+    from sqlalchemy import select
+    from careerops.db.models import ApplicationReviewAnswer
+    rows = db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id == app.id,
+                                                            ApplicationReviewAnswer.question.in_(list(result.manual_fields)))).all()
+    answers = dict(app.answers or {})
+    for row in rows:
+        if row.resolved and row.answer:
+            row.resolved = False
+            db.add(row)
+            plan = dict(answers.get(row.question) or {})
+            plan['reason'] = (f'CareerOps entered your answer "{row.answer[:80]}" but the form did not accept it. '
+                              'Check it against the form\'s options and save again.')
+            plan['not_accepted'] = True
+            answers[row.question] = plan
+    app.answers = answers
 
 
 def submission_evidence_summary(app: Application) -> dict:

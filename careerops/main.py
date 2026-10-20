@@ -116,7 +116,7 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
                                  'reason':plan.get('reason','CareerOps needs your answer before it can continue.'),
                                  'answer':row.answer if row else None,'resolved':row.resolved if row else False,
                                  'notes':row.notes if row else None,'input':review_input(q, plan),'blocker':blocker_info(q),
-                                 'field_type':plan.get('field_type')})
+                                 'field_type':plan.get('field_type'),'not_accepted':plan.get('not_accepted') and not (row and row.resolved)})
     blockers=[x for x in review_items if x['blocker']]
     review_items=[x for x in review_items if not x['blocker']]
     # Each "Prepare documents" makes a new set; show the newest of each type.

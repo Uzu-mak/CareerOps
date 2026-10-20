@@ -438,7 +438,7 @@ def save_application_review_answer(application_id:int, question:str=Form(...), a
         row.answer=answer.strip() or None; row.notes=notes.strip() or None; row.resolved=resolved; db.add(row)
     answers=dict(app.answers or {})
     plan=dict(answers.get(question,{}) or {})
-    plan.update({'user_answer':answer.strip() or None,'user_resolved':resolved,'user_notes':notes.strip() or None})
+    plan.update({'user_answer':answer.strip() or None,'user_resolved':resolved,'user_notes':notes.strip() or None,'not_accepted':False})
     answers[question]=plan; app.answers=answers
     if resolved:
         app.human_review_reasons=[x for x in (app.human_review_reasons or []) if x != question]
