@@ -235,10 +235,34 @@
     const answer = reviewValue(card);
     const app = card.querySelector('[data-action=save-review]')?.dataset.app;
     if (!app || !String(answer).trim()) return false;
-    await api(`/api/applications/${app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
+    const x = await api(`/api/applications/${app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
     card.dataset.saved = answer; delete card.dataset.dirty;
-    card.classList.add('is-done'); setReviewBadge(card, 'Answered', 'good'); refreshReviewFoot();
-    return true;
+    card.classList.add('is-done'); setReviewBadge(card, 'Answered', 'good');
+    syncOpen(x.open_questions);
+    return x;
+  };
+  /** Trust the server about what is still unanswered; fix any card that only looked done. */
+  const syncOpen = (open) => {
+    if (!Array.isArray(open)) return;
+    const want = new Set(open);
+    reviewCards().forEach((c) => {
+      if (want.has(c.dataset.question) && !c.dataset.dirty) { c.classList.remove('is-done'); setReviewBadge(c, 'Needs answer', 'warn'); }
+    });
+    refreshReviewFoot();
+  };
+  const showFirstOpen = () => {
+    const c = reviewCards().find((x) => !x.classList.contains('is-done') || x.dataset.dirty);
+    if (!c) return;
+    c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1600);
+    c.querySelector('[name=answer], [data-multi] input')?.focus({ preventScroll: true });
+  };
+  const offerApplyAgain = async (jobId) => {
+    const go = await confirmDialog({ title: 'Apply again now?', body: 'All your answers are saved. CareerOps will run the application again with them. It still stops instead of submitting if anything new comes up.', ok: 'Apply now' });
+    if (!go) { reload(300); return; }
+    const t = toast('Filling and submitting with your answers…', { title: 'Applying', timeout: 0 });
+    try { const r = await api(`/api/jobs/${jobId}/apply-live`, { method: 'POST', query: { submit: true } }); t.remove(); showResult(r); }
+    catch (e) { t.remove(); fail(e, 'Apply failed'); }
   };
   /** Before any run: save edited answers, and warn about questions still blank. False = cancelled. */
   const readyToRun = async () => {
@@ -337,17 +361,19 @@
       const card = btn.closest('.review-q');
       const multi = card.querySelector('[data-multi]');
       if (!String(reviewValue(card)).trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
-      await saveReviewCard(card);
-      const left = reviewCards().filter((c) => !c.classList.contains('is-done') || c.dataset.dirty).length;
-      if (left) { toast(`${left} question(s) still need saving or an answer`, { title: 'Answer saved' }); return; }
-      toast('Every question is answered.', { title: 'Answer saved' });
+      const x = await saveReviewCard(card);
+      const open = (x.open_questions || []).filter((q) => q !== card.dataset.question);
+      const unsaved = reviewCards().filter((c) => c.dataset.dirty).length;
+      if (open.length || unsaved) {
+        toast(open.length ? `Still needs an answer: “${open[0]}”${open.length > 1 ? ` and ${open.length - 1} more` : ''}` : `${unsaved} answer(s) changed but not saved`,
+          { title: 'Answer saved', tone: 'warn', timeout: 7000 });
+        showFirstOpen(); return;
+      }
+      toast('Every question is answered and saved.', { title: 'Answer saved', tone: 'good' });
       const jobId = document.querySelector('[data-action="apply"]')?.dataset.id;
       if (!jobId) { reload(1200); return; }
-      const go = await confirmDialog({ title: 'Apply again now?', body: 'CareerOps will run the application again with your new answers. It still stops instead of submitting if anything new comes up.', ok: 'Apply now' });
-      if (!go) { reload(300); return; }
-      const t = toast('Filling and submitting with your answers…', { title: 'Applying', timeout: 0 });
-      try { const r = await api(`/api/jobs/${jobId}/apply-live`, { method: 'POST', query: { submit: true } }); t.remove(); showResult(r); }
-      catch (e) { t.remove(); fail(e, 'Apply failed'); }
+      // Let this save finish on screen (button back to normal, card marked Answered) before asking.
+      setTimeout(() => offerApplyAgain(jobId), 900);
     },
     async 'mark-applied'(btn) {
       const ok = await confirmDialog({ title: 'Mark as applied?', body: 'Use this after you have submitted the application on the employer site. It is tracked as Submitted (unverified, since CareerOps did not see the confirmation).', ok: 'Mark as applied' });

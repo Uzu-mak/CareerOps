@@ -446,7 +446,15 @@ def save_application_review_answer(application_id:int, question:str=Form(...), a
         if question not in (app.human_review_reasons or []): app.human_review_reasons=list(app.human_review_reasons or [])+[question]
     app.requires_human_review=bool(app.human_review_reasons)
     db.add(app); db.commit(); db.refresh(row); db.refresh(app)
-    return {'ok':True,'resolved':row.resolved,'remaining':len(app.human_review_reasons or []),'requires_human_review':app.requires_human_review}
+    return {'ok':True,'resolved':row.resolved,'remaining':len(app.human_review_reasons or []),'requires_human_review':app.requires_human_review,
+            'open_questions':open_questions(db,app)}
+
+
+def open_questions(db:Session, app:Application) -> list[str]:
+    """Questions on this application with no saved answer, as the server sees it (blockers excluded)."""
+    from careerops.core.ui_options import is_blocker
+    done={r.question for r in db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app.id)).all() if r.resolved and r.answer}
+    return [q for q in dict.fromkeys(app.human_review_reasons or []) if not is_blocker(q) and q not in done]
 
 
 @router.post('/applications/{application_id}/draft-answer')
