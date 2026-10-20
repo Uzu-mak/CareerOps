@@ -1,6 +1,6 @@
-# CareerOps v3.0.1 — Fulfillment Matrix
+# CareerOps — Feature Matrix
 
-This matrix maps the requested CareerOps behavior to the implementation in this build.
+What is implemented, what needs credentials, and what is intentionally out of scope.
 
 | Capability | Status | Implementation / boundary |
 |---|---|---|
@@ -9,7 +9,7 @@ This matrix maps the requested CareerOps behavior to the implementation in this 
 | Salary + verified work-authorization policy | ✅ | Deterministic policy engine; LLM cannot invent legal answers |
 | Master resume baseline | ✅ | PDF/DOCX/TXT upload; resume text + original persisted |
 | Tailor resume per job | ✅ | Resume Agent uses master resume + verified CandidateEvidence |
-| Cover letter / Q&A / outreach | ✅ | Generated per job with truth guard |
+| Cover letter / Q&A / outreach | ✅ | Template-assembled from verified evidence; truth guard withholds unsupported claims and blocks unattended submission |
 | LinkedIn + GitHub + portfolio/project/application links | ✅ | First-class profile fields + additional clickable links; browser autofill support |
 | Daily Build Journal / living career memory | ✅ | Entries capture build, problem, architecture, tradeoffs, time, impact, explicit metrics, skills, links, lessons and project into CandidateEvidence |
 | Greenhouse discovery | ✅ | Public ATS adapter |
@@ -22,7 +22,7 @@ This matrix maps the requested CareerOps behavior to the implementation in this 
 | LinkedIn job discovery | ✅ via alert inbox | No logged-in scraping. Imports LinkedIn job-alert emails via IMAP or alert-ingest endpoint |
 | Indeed job discovery | ✅ via alert inbox | No logged-in scraping. Imports Indeed job-alert emails via IMAP or alert-ingest endpoint |
 | IMAP automatic alert polling | ✅ code / 🔑 mailbox credentials required | Watchtower imports unseen LinkedIn/Indeed alert messages every cycle |
-| Cross-source deduplication | ✅ | Same company/title/location collapses across providers and prefers official/direct source URLs |
+| Cross-source deduplication | ✅ | Exact normalized company + title (+ compatible location) collapses across providers and prefers official/direct source URLs |
 | Freshness / source status | ✅ | first_seen / last_seen / last_verified + SourceConfig scan status/count |
 | 15-minute Watchtower | ✅ | Local Docker wake interval 900s; per-source interval honored; AWS EventBridge rate(15 minutes) |
 | Immediate manual scan | ✅ | Dashboard “Scan jobs now” forces all enabled sources |
@@ -35,8 +35,12 @@ This matrix maps the requested CareerOps behavior to the implementation in this 
 | Recommended jobs queue | ✅ | Dashboard opportunity queue |
 | Background auto-apply | ✅ opt-in | Min fit + daily cap + hard-constraint + verified-profile gates |
 | Tailored resume used for application | ✅ | Browser gets generated tailored resume path |
-| Cover letter upload where field exists | ✅ | Browser agent tries labeled cover-letter file controls and bounded multi-step Continue/Next flows |
-| Autofill identity / LinkedIn / GitHub / portfolio / project links | ✅ | Browser agent field matching |
+| Cover letter upload where field exists | ✅ | Labeled cover-letter file inputs; resume goes to the resume/first file input |
+| Live application filling | ✅ | Frame-aware scan, answer planning, native selects, radios, checkboxes, React-Select comboboxes, autocomplete, Yes/No buttons, multi-step Next/Continue; tested against Lever/Greenhouse/Ashby-style fixtures |
+| Required questions it cannot answer | ✅ | Run pauses with the exact question text; the approved answer is filled on the next run |
+| Answer bank | ✅ | Approved answers reused for the same question on later applications, excluding sensitive and employer-specific ones |
+| EEO decline preference | ✅ opt-in | Picks the "decline to self-identify" option; otherwise optional EEO questions stay blank |
+| Autofill identity / LinkedIn / GitHub / portfolio / project links | ✅ | Word-boundary label matching in `apply_plan.py` |
 | Portal account planning | ✅ | Direct ATS, Google/OAuth, Workday tenant, unknown portal plans |
 | Account-gated portal assistance | ✅ assisted | Browser may enter Create Account/Sign Up, prefill verified email, then pauses for password ownership/email verification/MFA. Raw passwords are not stored in PostgreSQL |
 | CAPTCHA / MFA bypass | ❌ intentionally not implemented | Human takeover boundary |
@@ -52,7 +56,7 @@ This matrix maps the requested CareerOps behavior to the implementation in this 
 | SQS queues + DLQs | ✅ infrastructure | Discovery and application/browser queues |
 | Separate AWS browser worker | ✅ infrastructure | ECS/Fargate application worker consumes application queue |
 | EventBridge 15-minute scans | ✅ infrastructure | Scheduler sends discovery messages to SQS |
-| Bedrock integration | ✅ code / 🔑 AWS model access required | Semantic extraction/drafting; deterministic policy remains authoritative |
+| LLM job-description extraction | ✅ code / 🔑 OpenAI key or Bedrock access | Skills, required vs preferred, years, sponsorship, work arrangement; validated, cached, rules win; documents are not LLM-written |
 | CloudWatch | ✅ infrastructure | ECS log group and per-service streams |
 | Secrets Manager + KMS | ✅ infrastructure | Runtime secrets stored in KMS-encrypted Secrets Manager secret; S3/RDS encrypted |
 | Local Docker execution | ✅ | PostgreSQL + API + Watchtower |

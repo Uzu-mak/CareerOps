@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from careerops.db.models import JobPosting
 from careerops.services.fingerprint import job_fingerprint
-from careerops.agents.jd_analysis import analyze_job_text
+from careerops.agents.jd_analysis import analyze_job_text, apply_extraction
 
 
 def _norm(v: str | None) -> str:
@@ -69,11 +69,9 @@ def upsert_job(db: Session, data: dict) -> tuple[JobPosting, bool]:
     filtered.setdefault('raw_payload', data.get('raw_payload',{}))
     job=JobPosting(**filtered)
     db.add(job); db.flush()
+    # Rules only at ingest (fast, free); the model enriches jobs when they are analyzed.
     extracted=analyze_job_text(job)
-    for key,val in extracted.items():
-        if key=='detected_skills':
-            if not job.required_skills: job.required_skills=val
-        elif getattr(job,key,None) in (None, [], 'unknown') and val not in (None,[]):
-            setattr(job,key,val)
+    extracted.pop('extraction', None)
+    apply_extraction(job, extracted)
     db.commit(); db.refresh(job)
     return job, True

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from weasyprint import HTML
 from careerops.core.config import settings
-from careerops.db.models import CandidateProfile, JobPosting, JobAnalysis, GeneratedArtifact, Application, ProfileLink
+from careerops.db.models import CandidateEvidence, CandidateProfile, JobPosting, JobAnalysis, GeneratedArtifact, Application, ProfileLink
 from careerops.agents.evidence import rank_evidence
 from careerops.agents.truth_guard import verify_generated_claims
 from careerops.services.resume_baseline import extract_section_lines
@@ -19,6 +19,12 @@ h3 { font-size:10pt; margin:5px 0 2px; } p { margin:3px 0; } ul { margin:2px 0 6
 
 
 def _safe(s): return escape(s or '')
+
+
+def _headline(profile: CandidateProfile) -> str:
+    """Resume headline from the user's own target roles, never a hard-coded title."""
+    roles = [r.strip() for r in (profile.role_families or []) if r and r.strip()]
+    return roles[0] if roles else 'Software Engineer'
 
 
 def _relevant_skills(profile: CandidateProfile, analysis: JobAnalysis) -> list[str]:
@@ -37,46 +43,57 @@ def build_resume(db: Session, profile: CandidateProfile, job: JobPosting, analys
     """
     evidence = rank_evidence(db, profile, job, limit=5)
     key_skills = analysis.matched_skills[:10] + analysis.partial_skills[:4]
+    headline = _headline(profile)
     summary = (
-        f"Applied AI / Software Engineer targeting {job.title}, with experience across software, data and AI systems. "
+        f"{headline} targeting {job.title}, with experience across software, data and AI systems. "
         f"Most relevant strengths for {job.company}: {', '.join(key_skills[:8])}."
         if key_skills else
-        f"Applied AI / Software Engineer targeting {job.title}, with experience across software, data and AI systems."
+        f"{headline} targeting {job.title}, with experience across software, data and AI systems."
     )
+
+    # Collect every claim-bearing line first, check them, then render only what passed.
+    wanted = [s.lower() for s in (job.required_skills or []) + (job.preferred_skills or []) + analysis.matched_skills]
+    evidence_blocks: list[tuple[CandidateEvidence, list[str]]] = []
+    for e in evidence:
+        bullets = list(e.bullets or [])
+        bullets.sort(key=lambda b: -sum(1 for k in wanted if k and k in b.lower()))
+        evidence_blocks.append((e, bullets[:3]))
+
+    # Preserve the user's education section from the uploaded master resume verbatim.
+    education = extract_section_lines(profile, 'EDUCATION')[:4] if profile.baseline_resume_text else []
+
+    claim_lines = [summary] + [b for _, bullets in evidence_blocks for b in bullets] + education
+    passed, blocked = verify_generated_claims(' '.join(claim_lines), evidence, profile.baseline_resume_text or '')
+
+    def allowed(line: str) -> bool:
+        return not any(sentence and sentence in line for sentence in blocked)
 
     extra_links=db.scalars(select(ProfileLink).where(ProfileLink.profile_id==profile.id, ProfileLink.include_in_applications==True).order_by(ProfileLink.id).limit(2)).all()
     meta_bits=[profile.home_location, profile.email, profile.linkedin_url, profile.github_url] + [x.url for x in extra_links]
     parts = [
         f"<h1>{_safe(profile.full_name)}</h1>",
         f"<div class='meta'>{' | '.join(_safe(x) for x in meta_bits if x)}</div>",
-        '<h2>SUMMARY</h2>', f'<p>{_safe(summary)}</p>',
-        '<h2>EXPERIENCE & PROJECTS</h2>'
     ]
-    body_text = summary
-    emitted = set()
-    for e in evidence:
+    if allowed(summary):
+        parts += ['<h2>SUMMARY</h2>', f'<p>{_safe(summary)}</p>']
+    parts.append('<h2>EXPERIENCE & PROJECTS</h2>')
+    for e, bullets in evidence_blocks:
+        kept = [b for b in bullets if allowed(b)]
+        if not kept:
+            continue
         parts.append(f"<h3>{_safe(e.title)}{(' | ' + _safe(e.organization)) if e.organization else ''}{(' | ' + _safe(e.date_range)) if e.date_range else ''}</h3><ul>")
-        bullets = list(e.bullets or [])
-        wanted = [s.lower() for s in (job.required_skills or []) + (job.preferred_skills or []) + analysis.matched_skills]
-        bullets.sort(key=lambda b: -sum(1 for k in wanted if k and k in b.lower()))
-        for b in bullets[:3]:
-            parts.append(f'<li>{_safe(b)}</li>')
-            body_text += ' ' + b
-            emitted.add(' '.join(b.lower().split()))
+        parts += [f'<li>{_safe(b)}</li>' for b in kept]
         parts.append('</ul>')
 
-    # Preserve the user's education section from the uploaded master resume verbatim.
-    education = extract_section_lines(profile, 'EDUCATION') if profile.baseline_resume_text else []
-    if education:
+    kept_education = [line for line in education if allowed(line)]
+    if kept_education:
         parts.append('<h2>EDUCATION</h2>')
-        for line in education[:4]:
-            parts.append(f'<p>{_safe(line)}</p>'); body_text += ' ' + line
+        parts += [f'<p>{_safe(line)}</p>' for line in kept_education]
 
     parts += ['<h2>TECHNICAL SKILLS</h2>', f"<p>{_safe(', '.join(_relevant_skills(profile, analysis)))}</p>"]
+    # Blocked claims are removed from the document; they are recorded on the
+    # artifact (blocked_claims) so the user can see what was withheld and why.
     html = f"<html><head><style>{BASE_CSS}</style></head><body>{''.join(parts)}</body></html>"
-    passed, blocked = verify_generated_claims(body_text, evidence, profile.baseline_resume_text or '')
-    if blocked:
-        html += '<!-- truth-guard blocked claims: ' + _safe(' | '.join(blocked)) + ' -->'
     source_name = profile.baseline_resume_filename or 'structured candidate evidence'
     art = GeneratedArtifact(
         job_id=job.id, application_id=application.id if application else None,

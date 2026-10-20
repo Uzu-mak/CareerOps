@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     llm_provider: str = 'local'
     aws_region: str = 'us-west-2'
     bedrock_model_id: str = 'anthropic.claude-3-5-sonnet-20241022-v2:0'
+    openai_api_key: str | None = None
+    openai_model: str = 'gpt-4o-mini'
+    openai_base_url: str = 'https://api.openai.com/v1'
     s3_bucket: str | None = None
     ses_from_email: str | None = None
     ses_to_email: str | None = None

@@ -2,13 +2,30 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from careerops.core.config import settings
-from careerops.db.models import CandidateProfile, JobPosting, JobAnalysis, Application, GeneratedArtifact, ApplicationReviewAnswer
-from careerops.agents.jd_analysis import analyze_job_text
+from careerops.db.models import CandidateProfile, JobPosting, JobAnalysis, Application, GeneratedArtifact, ApplicationReviewAnswer, LLMCache
+from careerops.agents.jd_analysis import analyze_job_text, apply_extraction, extract_with_llm, validate_llm_extraction
+from careerops.agents.llm import get_llm
+from careerops.services.fingerprint import cache_key
 from careerops.agents.fit import score_job
 from careerops.agents.documents import build_resume, build_cover_letter
 from careerops.agents.qa import build_standard_application_answers
 from careerops.agents.outreach import draft_outreach
 from careerops.services.audit import agent_run
+
+
+def _cached_llm_extraction(db: Session, job: JobPosting) -> dict | None:
+    """Model extraction for this posting, cached so re-analysis costs nothing."""
+    llm = get_llm()
+    if llm is None or not (job.description or '').strip():
+        return None
+    key = cache_key('jd-extraction-v1', llm.name, llm.model, job.description)
+    hit = db.get(LLMCache, key)
+    if hit and isinstance(hit.response_json, dict):
+        return validate_llm_extraction(hit.response_json)
+    data = extract_with_llm(job, llm)
+    if data is not None:
+        db.merge(LLMCache(key=key, agent_name='JDAnalysisAgent', response_json=data)); db.commit()
+    return data
 
 
 def get_profile(db: Session) -> CandidateProfile:
@@ -24,13 +41,10 @@ def latest_analysis(db: Session, job_id: int):
 def analyze_job(db: Session, job: JobPosting) -> JobAnalysis:
     profile=get_profile(db)
     with agent_run(db,'JDAnalysisAgent',job_id=job.id,provider=settings.llm_provider,input_summary=f'{job.company} / {job.title}') as run:
-        extracted=analyze_job_text(job)
-        for key,val in extracted.items():
-            if key=='detected_skills':
-                if not job.required_skills: job.required_skills=val
-            elif val not in (None,[]) and (getattr(job,key,None) in (None,[],'unknown')):
-                setattr(job,key,val)
-        run.output_summary=f"skills={len(job.required_skills or [])}; sponsorship={job.sponsorship_policy}; years={job.required_years}"
+        extracted=analyze_job_text(job, llm_data=_cached_llm_extraction(db, job))
+        method=extracted.pop('extraction','rules')
+        apply_extraction(job, extracted)
+        run.output_summary=f"{method}; skills={len(job.required_skills or [])}; sponsorship={job.sponsorship_policy}; years={job.required_years}"
         db.add(job); db.commit()
     with agent_run(db,'FitAgent',job_id=job.id,input_summary='hard constraints + explainable weighted fit') as run:
         analysis=score_job(db,profile,job); db.add(analysis); db.commit(); db.refresh(analysis)

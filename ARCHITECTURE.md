@@ -1,4 +1,4 @@
-# CareerOps v3.0.1 Architecture
+# CareerOps Architecture
 
 ## End-to-end flow
 
@@ -39,9 +39,11 @@ Evidence retrieval -> tailored resume -> cover letter -> Q&A
          v
 Portal Account Plan -> Playwright Browser Agent
          |
-         +--> multi-step safe field/file fill
-         +--> account/sign-in gate detected -> human takeover
-         +--> CAPTCHA/MFA/sensitive question -> human review
+         +--> open the form (Lever /apply, Ashby /application, Greenhouse embed, Apply button)
+         +--> scan all frames (form_scan.js) -> plan answers (apply_plan.py)
+         +--> upload resume, fill, re-scan for follow-up questions
+         +--> required question unanswered -> exact question to review queue
+         +--> account wall / visible CAPTCHA / MFA -> human takeover
          |
          v
 Final submit
@@ -124,7 +126,9 @@ A manually marked `submitted` application without browser evidence remains `UNVE
 
 ## Human-review boundary
 
-CareerOps can persist exact application answers the user explicitly approves. It must not infer sensitive legal/demographic facts. Authentication challenges are a takeover boundary: raw portal passwords are not stored in PostgreSQL, CAPTCHA/MFA is not bypassed, and email/OAuth ownership verification remains the user's action.
+CareerOps can persist exact application answers the user explicitly approves. It must not infer sensitive legal/demographic facts.
+
+Answer sources for the browser agent, in priority order: answers approved for this application; profile facts; user-verified work-authorization answers; the user's EEO preference (opt-in "decline to self-identify"); and the answer bank of earlier approved answers. The bank excludes EEO, criminal-history, attestation, citizenship, clearance, salary, work-authorization and employer-specific motivation questions. Authentication challenges are a takeover boundary: raw portal passwords are not stored in PostgreSQL, CAPTCHA/MFA is not bypassed, and email/OAuth ownership verification remains the user's action.
 
 ## Local runtime
 

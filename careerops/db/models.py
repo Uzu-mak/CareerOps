@@ -47,6 +47,8 @@ class CandidateProfile(Base):
     work_authorization_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     work_authorization_expiration: Mapped[str | None] = mapped_column(String(40), nullable=True)
     legal_answers_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Opt-in: answer voluntary EEO questions with 'decline to self-identify'. None = ask/leave blank.
+    eeo_preference: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     baseline_minutes: Mapped[dict] = mapped_column(JSON, default=lambda: {
         'jd_analysis': 8,

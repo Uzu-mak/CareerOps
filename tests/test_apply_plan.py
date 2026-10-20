@@ -1,0 +1,152 @@
+"""Answer planning for application forms: what gets filled, chosen, skipped or sent to review."""
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from careerops.agents.apply_plan import (
+    Answer, bankable, build_facts, choose_option, classify, plan_application, same_question,
+)
+
+
+def profile(**overrides):
+    values = dict(
+        full_name='Ada King Lovelace', preferred_name='Ada', email='ada@example.com', phone='206-555-0100',
+        home_location='Seattle, WA', linkedin_url='https://linkedin.com/in/ada', github_url='https://github.com/ada',
+        legal_answers_verified_at=datetime.now(timezone.utc), authorized_to_work_us=True,
+        requires_current_sponsorship=False, requires_future_sponsorship=False, eeo_preference=None,
+    )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def field(label, type='text', required=False, value='', options=None, key=None):
+    opts = [{'id': f'o{i}', 'text': t, 'value': t} for i, t in enumerate(options or [])]
+    return {'key': key or label, 'id': key or label, 'type': type, 'label': label, 'required': required,
+            'value': value, 'options': opts}
+
+
+def ops(plan):
+    return {a.label: (a.op, a.value) for a in plan.actions}
+
+
+def test_profile_fields_and_name_split():
+    facts = build_facts(profile())
+    plan = plan_application([field('First Name'), field('Last Name'), field('Full name'), field('Email'),
+                             field('LinkedIn Profile'), field('Location (City)')], facts)
+    got = ops(plan)
+    assert got['First Name'] == ('fill', 'Ada')
+    assert got['Last Name'] == ('fill', 'Lovelace')
+    assert got['Full name'] == ('fill', 'Ada King Lovelace')
+    assert got['Email'] == ('fill', 'ada@example.com')
+    assert got['LinkedIn Profile'][1] == 'https://linkedin.com/in/ada'
+    assert got['Location (City)'] == ('fill', 'Seattle, WA')
+
+
+def test_verified_legal_answers_map_to_yes_no_options():
+    facts = build_facts(profile(requires_future_sponsorship=True))
+    plan = plan_application([
+        field('Are you legally authorized to work in the United States?', 'radio', True, options=['Yes', 'No']),
+        field('Do you currently require sponsorship?', 'select', True, options=['Select...', 'Yes', 'No']),
+        field('Will you now or in the future require visa sponsorship?', 'select', True, options=['Select...', 'Yes', 'No']),
+    ], facts)
+    got = ops(plan)
+    assert got['Are you legally authorized to work in the United States?'] == ('check', 'Yes')
+    assert got['Do you currently require sponsorship?'] == ('select', 'No')
+    assert got['Will you now or in the future require visa sponsorship?'] == ('select', 'Yes')
+    assert plan.unresolved == []
+
+
+def test_unverified_legal_answers_go_to_review():
+    facts = build_facts(profile(legal_answers_verified_at=None))
+    plan = plan_application([field('Are you legally authorized to work in the US?', 'radio', True, options=['Yes', 'No'])], facts)
+    assert plan.actions == []
+    assert plan.unresolved[0]['label'] == 'Are you legally authorized to work in the US?'
+    assert 'not verified' in plan.unresolved[0]['reason']
+
+
+def test_eeo_decline_preference_picks_decline_option():
+    facts = build_facts(profile(eeo_preference='decline'))
+    plan = plan_application([
+        field('Gender', 'select', options=['Please select', 'Male', 'Female', 'Decline To Self Identify']),
+        field('Veteran Status', 'select', options=['Select', 'I am a veteran', "I don't wish to answer"]),
+        field('Disability Status', 'radio', options=['Yes, I have a disability', 'No', 'I do not want to answer']),
+    ], facts)
+    got = ops(plan)
+    assert got['Gender'] == ('select', 'Decline To Self Identify')
+    assert got['Veteran Status'] == ('select', "I don't wish to answer")
+    assert got['Disability Status'] == ('check', 'I do not want to answer')
+
+
+def test_eeo_without_preference_is_skipped_when_optional_and_reviewed_when_required():
+    facts = build_facts(profile())
+    plan = plan_application([field('Gender', 'select', options=['Male', 'Female', 'Decline']),
+                             field('Race', 'select', True, options=['A', 'B', 'Decline'])], facts)
+    assert plan.actions == []
+    assert plan.skipped == ['Gender']
+    assert [u['label'] for u in plan.unresolved] == ['Race']
+
+
+def test_word_boundaries_avoid_false_sensitive_matches():
+    assert classify('Preferred office: Brighton, East Sussex') == 'question'
+    assert classify('Sex') == 'eeo'
+    assert classify('Have you ever been convicted of a felony?') == 'criminal'
+    assert classify('Are you at least 18 years of age?') == 'question'
+
+
+def test_approved_answer_beats_everything_and_matches_reworded_question():
+    facts = build_facts(profile(), approved_answers={'What is your desired salary?': '165000'})
+    plan = plan_application([field('Desired salary', required=True)], facts)
+    assert ops(plan)['Desired salary'] == ('fill', '165000')
+
+
+def test_answer_bank_reuses_only_non_sensitive_answers():
+    bank = {'How did you hear about us?': 'LinkedIn', 'Have you ever been convicted of a crime?': 'No',
+            'What are your salary expectations?': '200000'}
+    facts = build_facts(profile(), answer_bank=bank)
+    plan = plan_application([
+        field('How did you hear about this job?', 'select', True, options=['Select...', 'LinkedIn', 'Referral']),
+        field('Have you ever been convicted of a crime?', 'radio', True, options=['Yes', 'No']),
+        field('What are your salary expectations?', required=True),
+    ], facts)
+    assert ops(plan) == {'How did you hear about this job?': ('select', 'LinkedIn')}
+    assert {u['label'] for u in plan.unresolved} == {'Have you ever been convicted of a crime?', 'What are your salary expectations?'}
+    assert bankable('How did you hear about us?') and not bankable('Gender') and not bankable('Do you require sponsorship?')
+    assert not bankable('Why do you want to work at Initech?')   # names the employer
+
+
+def test_prefilled_values_are_kept_except_profile_facts():
+    facts = build_facts(profile(), answer_bank={'Current company': 'Initech'})
+    plan = plan_application([field('Current company', value='Globex'), field('Full name', value='PARSED NAME'),
+                             field('Email', value='ada@example.com')], facts)
+    assert ops(plan) == {'Full name': ('fill', 'Ada King Lovelace')}
+
+
+def test_files_resume_first_input_and_cover_letter():
+    facts = build_facts(profile(), resume_path='/tmp/r.pdf', cover_letter_path='/tmp/c.pdf')
+    plan = plan_application([field('Resume/CV', 'file', True), field('Cover Letter', 'file'), field('', 'file', key='x')], facts)
+    assert [(a.label, a.value) for a in plan.actions] == [('Resume/CV', '/tmp/r.pdf'), ('Cover Letter', '/tmp/c.pdf')]
+    plan = plan_application([field('Portfolio sample', 'file', True)], facts)
+    assert plan.unresolved[0]['reason'] == 'required file upload'
+
+
+def test_required_open_question_without_answer_is_unresolved_with_exact_text():
+    plan = plan_application([field('Why do you want to work here?', 'textarea', True)], build_facts(profile()))
+    assert plan.unresolved == [{'label': 'Why do you want to work here?', 'category': 'motivation',
+                                'reason': 'required question with no saved answer'}]
+
+
+def test_choose_option_variants():
+    yes = Answer('Yes', 'verified', 'yesno')
+    assert choose_option(['Select...', 'Yes, I am authorized', 'No'], yes) == 1
+    assert choose_option(['No', 'Yes'], Answer('No', 'verified', 'yesno')) == 0
+    assert choose_option(['I agree to the privacy notice'], yes) == 0
+    assert choose_option(['Male', 'Female'], Answer('decline', 'eeo-preference', 'decline')) is None
+    assert choose_option(['Seattle, Washington, United States', 'Auburn'], Answer('Seattle, WA', 'profile')) == 0
+    assert choose_option(['Company website', 'LinkedIn'], Answer('linkedin', 'answer-bank')) == 1
+    assert choose_option(['Apples', 'Oranges'], Answer('LinkedIn', 'answer-bank')) is None
+
+
+def test_same_question():
+    assert same_question('How did you hear about us?', 'How did you hear about this job?')
+    assert same_question('Desired salary', 'What is your desired salary?')
+    assert not same_question('Gender', 'Gender identity and pronouns preference for the team')
+    assert not same_question('Are you authorized to work?', 'Do you require sponsorship?')

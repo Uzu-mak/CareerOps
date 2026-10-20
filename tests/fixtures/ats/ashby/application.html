@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>AI Engineer @ Initech</title>
+<style>.ashby-application-form-field-entry{margin:14px 0}._required_x1::after{content:" *";color:#c00}._yesno button{padding:6px 14px}._yesno button._active_q2{background:#333;color:#fff}</style></head><body>
+<div id="root"></div>
+<script>
+// Ashby renders the whole form client-side after load.
+setTimeout(() => {
+  document.getElementById('root').innerHTML = `
+  <h1>AI Engineer</h1>
+  <div class="ashby-application-form-container"><form id="f" onsubmit="return false">
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required_x1" for="_systemfield_name">Name</label><input id="_systemfield_name" name="_systemfield_name"></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required_x1" for="_systemfield_email">Email</label><input id="_systemfield_email" type="email" name="_systemfield_email"></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required_x1">Resume</label>
+      <div class="_container_r"><button type="button" class="_button_u">Upload File</button><input type="file" name="_systemfield_resume" style="display:none"></div></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required_x1">Will you now or in the future require visa sponsorship?</label>
+      <div class="_yesno"><button type="button">Yes</button><button type="button">No</button></div></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required_x1" for="q_why">Why do you want to work at Initech?</label><textarea id="q_why" name="q_why"></textarea></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="q_pronouns">Pronouns</label><input id="q_pronouns" name="q_pronouns"></div>
+    <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
+  </form></div>`;
+  let sponsor = '';
+  document.querySelectorAll('._yesno button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('._yesno button').forEach((x) => x.classList.remove('_active_q2'));
+    b.classList.add('_active_q2'); sponsor = b.textContent;
+  }));
+  document.querySelector('.ashby-application-form-submit-button').addEventListener('click', () => {
+    const fd = new FormData(document.getElementById('f'));
+    const resume = document.querySelector('[name=_systemfield_resume]').files[0];
+    if (!fd.get('_systemfield_name') || !fd.get('_systemfield_email') || !resume || !sponsor || !fd.get('q_why')) {
+      const p = document.createElement('p'); p.setAttribute('role', 'alert'); p.textContent = 'Missing entry for required field'; document.getElementById('f').appendChild(p); return;
+    }
+    setTimeout(() => {
+      const q = new URLSearchParams({ name: fd.get('_systemfield_name'), email: fd.get('_systemfield_email'), resume: resume.name, sponsor, why: fd.get('q_why') });
+      history.pushState({}, '', '?submitted=1&' + q.toString());
+      document.getElementById('root').innerHTML = '<h2>Application submitted</h2><p>Your application was successfully submitted. We will be in touch!</p>';
+    }, 1200);
+  });
+}, 500);
+</script>
+</body></html>

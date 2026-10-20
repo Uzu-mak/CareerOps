@@ -2,11 +2,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-from careerops.db.models import CandidateProfile, JobPosting, Application, RuntimeSettings, ProfileLink, ApplicationReviewAnswer
+from careerops.db.models import CandidateProfile, JobPosting, Application, RuntimeSettings
 from careerops.agents.orchestrator import prepare_application, latest_analysis
 from careerops.agents.browser import run_generic_browser, detect_portal
 from careerops.services.audit import agent_run
 from careerops.services.application_tracking import record_browser_result
+from careerops.services.application_answers import answer_bank, application_links, approved_answers
 
 
 def get_runtime_settings(db: Session) -> RuntimeSettings:
@@ -65,18 +66,25 @@ def attempt_autopilot_application(db: Session, profile: CandidateProfile, job: J
     app.portal = detect_portal(target)
     app.mode = 'AUTO'
     db.add(app); db.commit(); db.refresh(app)
+
+    # Never submit unattended when the truth guard withheld claims from the
+    # tailored documents: the user reviews what was removed first.
+    guard_issues = [
+        f"{label}: {len(artifact.blocked_claims or [])} unverified claim(s) withheld"
+        for label, artifact in (('resume', package['resume']), ('cover letter', package['cover_letter']))
+        if not artifact.truth_guard_passed
+    ]
+    if guard_issues:
+        app.status = 'review'; app.requires_human_review = True
+        app.human_review_reasons = sorted(set((app.human_review_reasons or []) + [f'truth guard - {x}' for x in guard_issues]))
+        db.add(app); db.commit()
+        return {'attempted': False, 'submitted': False, 'reason': 'truth guard withheld claims; review required', 'application_id': app.id}
     try:
         with agent_run(db, 'AutopilotBrowserAgent', job_id=job.id, application_id=app.id, input_summary=f'{app.portal} unattended-safe attempt') as run:
-            extra_links=[{'label':x.label,'url':x.url,'link_type':x.link_type,'include_in_applications':x.include_in_applications} for x in db.scalars(select(ProfileLink).where(ProfileLink.profile_id==profile.id)).all()]
-            approved_review_answers={}
-            for q,plan in (app.answers or {}).items():
-                if not isinstance(plan,dict): continue
-                answer=plan.get('user_answer') or plan.get('answer')
-                if answer is not None and (plan.get('user_resolved') or plan.get('mode') in {'AUTO_PROFILE','AUTO_RULE','AUTO_VERIFIED','USER_VERIFIED'}):
-                    approved_review_answers[q]=str(answer)
-            for x in db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app.id,ApplicationReviewAnswer.resolved==True)).all():
-                if x.answer: approved_review_answers[x.question]=x.answer
-            result = run_generic_browser(profile, job, app, target, resume_path=package['resume'].file_path, cover_letter_path=package['cover_letter'].file_path, submit=True, extra_links=extra_links, approved_review_answers=approved_review_answers)
+            extra_links = application_links(db, profile.id)
+            approved = approved_answers(db, app)
+            bank = answer_bank(db, exclude_application_id=app.id)
+            result = run_generic_browser(profile, job, app, target, resume_path=package['resume'].file_path, cover_letter_path=package['cover_letter'].file_path, submit=True, extra_links=extra_links, approved_review_answers=approved, answer_bank=bank)
             run.output_summary = f'{result.status}; {len(result.filled_fields)} fields; {len(result.manual_fields)} review items'
     except Exception as exc:
         app.status = 'review'; app.requires_human_review = True

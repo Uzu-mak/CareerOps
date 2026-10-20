@@ -25,6 +25,7 @@ class ProfileUpdate(BaseModel):
     requires_future_sponsorship: bool | None=None
     work_authorization_type: str | None=None
     work_authorization_expiration: str | None=None
+    eeo_preference: str | None=None
 
 class ManualJobIn(BaseModel):
     company: str

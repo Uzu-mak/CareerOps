@@ -1,8 +1,10 @@
-# CareerOps Autopilot v3.0.1
+# CareerOps Autopilot
+
+[![tests](https://github.com/Uzu-mak/CareerOps/actions/workflows/tests.yml/badge.svg)](https://github.com/Uzu-mak/CareerOps/actions/workflows/tests.yml)
 
 CareerOps is a personal AI job-search control tower built around **Discover → Evaluate → Prepare → Apply → Verify → Report**. It combines deterministic policy rules, live job-source adapters, a living candidate-evidence store, document generation, Playwright browser automation, application proof, notifications, and AWS-ready workers.
 
-## What v3.0.1 does
+## What it does
 
 ### Discover
 
@@ -13,7 +15,7 @@ CareerOps is a personal AI job-search control tower built around **Discover → 
 - Adzuna broad-market search driven by your configured role families and locations (`ADZUNA_APP_ID` + `ADZUNA_APP_KEY` required).
 - USAJOBS official search API driven by your role/location/radius policy (`USAJOBS_API_KEY` + `USAJOBS_USER_AGENT` required).
 - LinkedIn and Indeed discovery through job-alert email ingestion instead of logged-in scraping. Alerts can be pasted into CareerOps or polled automatically through IMAP.
-- Cross-source semantic deduplication. Direct/official records are preferred over aggregator duplicates.
+- Cross-source deduplication: the same company + title + location from two sources is one opportunity, and direct/official records win over aggregator copies.
 - Watchtower wakes every 15 minutes locally; each source can also have its own scan interval.
 
 CareerOps does **not** claim to crawl literally every job site on the internet. It combines supported ATS feeds, configured company career sites, broad-market APIs, and alert-email ingestion. Public sites that block automated access are reported as source errors; CareerOps does not bypass anti-bot controls.
@@ -30,7 +32,9 @@ Your Candidate Profile controls:
 - salary floor and target
 - user-verified work authorization and sponsorship answers
 
-The policy layer applies hard constraints before expensive semantic work. The Fit Agent produces an explainable score, matched/partial/gap skills, A+/A/B+/B/C priority, and `APPLY / REVIEW / SKIP` recommendation.
+The policy layer applies hard constraints first. The Fit Agent produces an explainable score, matched/partial/gap skills, A+/A/B+/B/C priority, and an `APPLY / REVIEW / SKIP` recommendation.
+
+**Job-description extraction.** Rules always run: a fixed skill vocabulary, explicit "N+ years", sponsorship and clearance phrases. With `LLM_PROVIDER=openai` (or `bedrock`) a model also extracts skills outside that vocabulary, required vs preferred skills, years, sponsorship policy and work arrangement as JSON. The output is validated (types, allowed values, length limits), the posting is passed to the model as untrusted data, explicit rule matches win over the model, and results are cached per posting. If the model is unavailable, CareerOps falls back to rules alone.
 
 ### Living candidate evidence
 
@@ -42,32 +46,34 @@ CareerOps is not limited to one static resume.
 - Every journal entry is projected into `CandidateEvidence` and becomes retrievable for fit scoring, resume tailoring, cover letters, application answers, outreach, and interview stories.
 - Numeric impact is treated as verified only when the user explicitly entered it; CareerOps does not invent metrics.
 
-### Prepare and apply
+### Prepare
 
-For each job, CareerOps can:
+For each job, CareerOps tailors a resume from the master resume plus verified CandidateEvidence, writes a cover letter, prepares application Q&A and drafts outreach. These documents are assembled from your evidence with templates, not free-written by a model.
 
-- tailor a resume from the master resume + verified CandidateEvidence
-- generate a grounded cover letter
-- prepare application Q&A
-- draft outreach
-- autofill identity, LinkedIn, GitHub, portfolio/project links
-- upload the tailored resume and cover letter where supported
-- traverse a bounded multi-step application flow with Playwright
-- attempt final submission when Autopilot is enabled and all gates pass
+Every generated claim goes through the **truth guard**. A bullet with a number or claim that your evidence does not support is withheld from the document, and the withheld lines are listed on the artifact. Autopilot will not submit an application whose documents had claims withheld; it sends it to review instead.
 
-Background Autopilot is opt-in. It requires: hard constraints not `FAIL`, recommendation `APPLY`, fit above your configured threshold, a master resume, verified legal/work-authorization values, a live application URL, and remaining daily application budget.
+### Apply: the browser agent
 
-### Account/authentication boundary
+`careerops/agents/browser.py` drives Chromium with Playwright:
 
-CareerOps has a Portal Account Agent for direct ATS flows, Google/OAuth, Workday company-scoped accounts, and unknown portals. It can detect visible account creation/sign-in gates, click a public **Create Account / Sign Up** action, and prefill your verified email.
+1. **Open the form.** Lever links go to `/apply`, Ashby links to `/application`, a Greenhouse board embedded in a company careers page is opened directly, and otherwise the agent clicks "Apply for this job" / "Apply now" (never "Apply with LinkedIn").
+2. **Scan every frame.** `form_scan.js` lists visible inputs, selects, radio and checkbox groups, custom dropdowns (React-Select style comboboxes), Yes/No button pairs and file inputs, with each field's question text and whether it is required.
+3. **Plan the answers.** `apply_plan.py` (pure Python, unit-tested) decides each field from, in order: answers you approved for this application; your profile (name, email, phone, links, location); your *verified* work-authorization and sponsorship answers; your EEO preference; and the answer bank.
+4. **Fill.** The tailored resume is uploaded first, because Lever and Ashby parse it and overwrite fields; then everything else is filled, and the page is scanned again so follow-up questions that appear after an answer are handled too.
+5. **Stop or submit.** If a required question is still unanswered, the run stops and reports that exact question. Otherwise it clicks through Next/Continue steps and Submit, and waits up to 20 seconds for a confirmation message that was not on the page before.
 
-It intentionally **does not store raw portal passwords**, bypass CAPTCHA/MFA, or invent one-time verification codes. Password creation, email verification, OAuth ownership, MFA, CAPTCHA, and other authentication challenges are human/session takeover boundaries. Real employer portals change frequently, so live portal behavior must be validated against the current page before treating a portal as unattended.
+What it will not do:
 
-### Human review
+- **CAPTCHA / MFA / accounts.** A visible CAPTCHA challenge, a verification-code prompt or a sign-in/create-account wall pauses the run. The invisible reCAPTCHA badge most ATS pages carry is not treated as a blocker. Raw portal passwords are never stored.
+- **Legal and EEO answers.** Work authorization and sponsorship are answered only from values you verified on `/profile`. Voluntary EEO questions (gender, race, veteran, disability) are left blank when optional; if you set *Voluntary EEO questions → "decline to self-identify"* on `/profile`, the agent picks the decline option instead. Criminal history, attestations, citizenship, clearance and salary are never answered without your explicit answer for that application.
 
-Sensitive or ambiguous questions pause instead of being guessed. Review items are clickable on the job page. You can see why CareerOps paused, view any safe configured suggestion, enter the exact answer you approve, add notes, save it for that application, and retry.
+### Human review and the answer bank
 
-Examples of review boundaries include disability/EEO/veteran questions, criminal-history questions, ambiguous sponsorship language, legal attestations, export-control/clearance questions, CAPTCHA, MFA, and account verification.
+When a run pauses, the job page lists the exact questions it could not answer. Enter the answer you approve and run Apply again; the agent fills it and continues.
+
+Answers you approve are also kept as an **answer bank**. The next application that asks the same question ("How did you hear about this job?", "Are you at least 18?") reuses your answer, so the review queue shrinks over time. Sensitive answers (EEO, legal, salary, citizenship, clearance) and motivation answers that name an employer are never reused across applications.
+
+Background Autopilot is opt-in. It requires: hard constraints not `FAIL`, recommendation `APPLY`, fit above your configured threshold, a master resume, verified work-authorization answers, a passing truth guard, a live application URL, and remaining daily application budget.
 
 ### Applications + proof
 
@@ -224,9 +230,16 @@ pytest -q
 python scripts/project_audit.py
 ```
 
-See `BUILD_REPORT.md` and `FEATURE_MATRIX.md` for the exact verification result and explicit external-validation boundaries.
+The test suite includes end-to-end browser runs against local fixtures that reproduce Lever, Greenhouse (embedded from a second origin, with React-Select dropdowns and a location autocomplete) and Ashby forms, plus a CAPTCHA challenge and an account wall (`tests/test_browser_ats.py`). They need Playwright's Chromium (`python -m playwright install chromium`). GitHub Actions runs the suite on every push.
+
+Live employer portals change their markup. When a run pauses with *application form not detected* or *submission confirmation not detected*, the screenshot saved with the application shows where it stopped.
+
+See `FEATURE_MATRIX.md` for what is implemented, what needs credentials, and what is intentionally out of scope.
 
 
-## v3.0.1 PostgreSQL startup hotfix
+## Changelog
 
-A PostgreSQL-only startup defect in v3.0 used `VARCHAR(40)` for `SourceConfig.last_status` even though provider setup/error messages can exceed 40 characters. v3.0.1 changes this field to `TEXT` and runs an idempotent PostgreSQL compatibility widening step before source seeding. It also widens legacy `token_or_url`, source name, and source type columns where needed, preserving existing rows instead of requiring volume deletion.
+- **Browser agent rebuild.** Frame-aware form scanning, answer planning, React-Select/autocomplete/Yes-No button support, Lever/Ashby/Greenhouse-embed entry, required-question pauses with exact question text, answer bank, EEO decline preference, visible-only CAPTCHA detection, and confirmation that must appear after submit.
+- **LLM job-description extraction** (OpenAI or Bedrock), validated and merged with rules.
+- **Truth guard on documents.** Unsupported claims are withheld from resumes and cover letters, and block unattended submission.
+- **3.0.1.** `SourceConfig.last_status` is `TEXT` on PostgreSQL, with an idempotent widening step for existing volumes.

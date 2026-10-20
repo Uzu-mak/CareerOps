@@ -1,0 +1,102 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Job Application for Senior AI Engineer at Globex</title>
+<style>
+.field{margin:14px 0}.select__container{position:relative;width:320px}.select__control{border:1px solid #999;padding:4px;display:flex}
+.select__placeholder{color:#888}.select__menu{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #999;z-index:5}
+.select__option{padding:4px}.select__input{border:0;outline:0;width:60px}.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#loc-list{border:1px solid #999;width:320px}#loc-list div{padding:3px}
+</style></head><body>
+<div id="app"><h1>Senior AI Engineer</h1><p>Globex · Remote (US)</p>
+<form id="application-form" novalidate>
+  <div class="field"><label for="first_name">First Name<span class="required">*</span></label><input id="first_name" name="first_name" aria-required="true"></div>
+  <div class="field"><label for="last_name">Last Name<span class="required">*</span></label><input id="last_name" name="last_name" aria-required="true"></div>
+  <div class="field"><label for="email">Email<span class="required">*</span></label><input id="email" name="email" type="email" aria-required="true"></div>
+  <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" type="tel"></div>
+  <div class="field"><label id="loc-label" for="candidate-location">Location (City)</label>
+    <input id="candidate-location" name="location" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="loc-list" autocomplete="off">
+    <div id="loc-list" role="listbox" hidden></div></div>
+  <div class="field"><div class="label" id="resume-label">Resume/CV<span class="required">*</span></div>
+    <button type="button" onclick="document.getElementById('resume').click()">Attach</button>
+    <input id="resume" name="resume" type="file" class="visually-hidden" aria-labelledby="resume-label" aria-required="true"><span id="resume-name"></span></div>
+  <div class="field"><div class="label" id="cl-label">Cover Letter</div>
+    <button type="button">Attach</button><input id="cover_letter" name="cover_letter" type="file" class="visually-hidden" aria-labelledby="cl-label"></div>
+  <div class="field"><label for="q_linkedin">LinkedIn Profile</label><input id="q_linkedin" name="q_linkedin"></div>
+  <div class="field"><label for="q_site">Website</label><input id="q_site" name="q_site"></div>
+  <div class="field" data-select="q_auth"><label id="q_auth-label" for="q_auth">Are you legally authorized to work in the United States?<span class="required">*</span></label></div>
+  <div class="field" data-select="q_sponsor"><label id="q_sponsor-label" for="q_sponsor">Will you now or in the future require sponsorship to work in the United States?<span class="required">*</span></label></div>
+  <div class="field"><label for="q_source">How did you hear about this job?<span class="required">*</span></label>
+    <select id="q_source" name="q_source" aria-required="true"><option value="">Select...</option><option value="li">LinkedIn</option><option value="site">Company website</option><option value="ref">Referral</option></select></div>
+  <div id="eeoc_fields"><h3>Voluntary Self-Identification</h3>
+    <div class="field"><label for="gender">Gender</label><select id="gender" name="gender"><option value="">Please select</option><option value="1">Male</option><option value="2">Female</option><option value="3">Decline To Self Identify</option></select></div>
+    <div class="field"><label for="hispanic">Are you Hispanic/Latino?</label><select id="hispanic" name="hispanic"><option value="">Please select</option><option value="y">Yes</option><option value="n">No</option><option value="d">Decline To Self Identify</option></select></div>
+    <div class="field"><label for="veteran">Veteran Status</label><select id="veteran" name="veteran"><option value="">Please select</option><option value="1">I am not a protected veteran</option><option value="2">I identify as one or more of the classifications of a protected veteran</option><option value="3">I don't wish to answer</option></select></div>
+    <fieldset class="field"><legend>Disability Status</legend>
+      <label><input type="radio" name="disability" value="1"> Yes, I have a disability (or previously had a disability)</label><br>
+      <label><input type="radio" name="disability" value="2"> No, I do not have a disability and have not had one in the past</label><br>
+      <label><input type="radio" name="disability" value="3"> I do not want to answer</label></fieldset>
+  </div>
+  <p id="error" class="error" role="alert" hidden></p>
+  <button type="submit" id="submit_app">Submit application</button>
+</form></div>
+<script>
+// Minimal React-Select clone: input[role=combobox] inside a value container, menu on open.
+const state = {};
+function makeSelect(host) {
+  const id = host.dataset.select;
+  const box = document.createElement('div'); box.className = 'select__container';
+  box.innerHTML = `<div class="select__control"><div class="select__value-container"><div class="select__placeholder">Select...</div>
+    <input id="${id}" class="select__input" role="combobox" aria-labelledby="${id}-label" aria-required="true" aria-expanded="false" autocomplete="off"></div></div>`;
+  host.appendChild(box);
+  const input = box.querySelector('input');
+  const close = () => { const m = box.querySelector('.select__menu'); if (m) m.remove(); input.setAttribute('aria-expanded', 'false'); };
+  const open = () => {
+    close();
+    const menu = document.createElement('div'); menu.className = 'select__menu'; menu.setAttribute('role', 'listbox');
+    ['Yes', 'No'].filter((o) => o.toLowerCase().startsWith(input.value.toLowerCase())).forEach((o) => {
+      const el = document.createElement('div'); el.className = 'select__option'; el.setAttribute('role', 'option'); el.textContent = o;
+      el.addEventListener('mousedown', (ev) => { ev.preventDefault(); choose(o); });
+      el.addEventListener('click', () => choose(o));
+      menu.appendChild(el);
+    });
+    box.appendChild(menu); input.setAttribute('aria-expanded', 'true');
+  };
+  const choose = (o) => {
+    state[id] = o; input.value = '';
+    const vc = box.querySelector('.select__value-container');
+    vc.querySelector('.select__placeholder, .select__single-value').outerHTML = `<div class="select__single-value">${o}</div>`;
+    close();
+  };
+  input.addEventListener('focus', open); input.addEventListener('click', open); input.addEventListener('input', open);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+}
+document.querySelectorAll('[data-select]').forEach(makeSelect);
+
+// Location autocomplete (Greenhouse uses a geocoder).
+const PLACES = ['Seattle, Washington, United States', 'Seattle Heights, Washington, United States', 'Auburn, Washington, United States'];
+const loc = document.getElementById('candidate-location'), list = document.getElementById('loc-list');
+loc.addEventListener('input', () => {
+  const head = loc.value.split(',')[0].trim().toLowerCase();
+  list.innerHTML = '';
+  if (head.length < 2) { list.hidden = true; return; }
+  PLACES.filter((p) => p.toLowerCase().startsWith(head)).forEach((p) => {
+    const d = document.createElement('div'); d.setAttribute('role', 'option'); d.textContent = p;
+    d.addEventListener('click', () => { loc.value = p; list.hidden = true; state.location = p; });
+    list.appendChild(d);
+  });
+  list.hidden = !list.children.length;
+});
+document.getElementById('resume').addEventListener('change', (e) => { document.getElementById('resume-name').textContent = e.target.files[0].name; });
+
+document.getElementById('application-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const missing = ['first_name', 'last_name', 'email', 'q_source'].filter((k) => !String(fd.get(k) || '').trim());
+  if (!state.q_auth) missing.push('q_auth'); if (!state.q_sponsor) missing.push('q_sponsor');
+  if (!document.getElementById('resume').files.length) missing.push('resume');
+  if (missing.length) { const el = document.getElementById('error'); el.hidden = false; el.textContent = 'Please complete: ' + missing.join(', '); return; }
+  const q = new URLSearchParams();
+  for (const [k, v] of fd.entries()) q.append(k, typeof v === 'string' ? v : v.name);
+  q.append('q_auth', state.q_auth); q.append('q_sponsor', state.q_sponsor); q.append('location_choice', state.location || '');
+  setTimeout(() => { location.href = 'confirmation.html?' + q.toString(); }, 300);
+});
+</script>
+</body></html>

@@ -17,6 +17,7 @@ from careerops.sources.lever import LeverSource
 from careerops.sources.ashby import AshbySource
 from careerops.sources.generic import GenericPageSource
 from careerops.agents.browser import run_generic_browser, run_mock_browser, detect_portal
+from careerops.services.application_answers import answer_bank, application_links, approved_answers
 from careerops.services.audit import agent_run
 from careerops.agents.account import account_plan
 from careerops.workers.discovery import scan_enabled_sources
@@ -158,16 +159,10 @@ def apply_live(job_id:int, submit:bool=Query(True), db:Session=Depends(get_db)):
         raise HTTPException(409,'CareerOps blocked application because a hard eligibility/location/policy constraint failed.')
     app.portal=detect_portal(target); app.mode='AUTO' if submit else 'PREPARE'; db.add(app); db.commit(); db.refresh(app)
     with agent_run(db,'LiveBrowserApplicationAgent',job_id=job_id,application_id=app.id,input_summary=f'{app.portal} browser fill + tailored resume upload') as run:
-        extra_links=[{'label':x.label,'url':x.url,'link_type':x.link_type,'include_in_applications':x.include_in_applications} for x in db.scalars(select(ProfileLink).where(ProfileLink.profile_id==p.id)).all()]
-        approved_review_answers={}
-        for q,plan in (app.answers or {}).items():
-            if not isinstance(plan,dict): continue
-            answer=plan.get('user_answer') or plan.get('answer')
-            if answer is not None and (plan.get('user_resolved') or plan.get('mode') in {'AUTO_PROFILE','AUTO_RULE','AUTO_VERIFIED','USER_VERIFIED'}):
-                approved_review_answers[q]=str(answer)
-        for x in db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app.id,ApplicationReviewAnswer.resolved==True)).all():
-            if x.answer: approved_review_answers[x.question]=x.answer
-        result=run_generic_browser(p,j,app,target,resume_path=package['resume'].file_path,cover_letter_path=package['cover_letter'].file_path,submit=submit,extra_links=extra_links,approved_review_answers=approved_review_answers)
+        extra_links=application_links(db,p.id)
+        approved=approved_answers(db,app)
+        bank=answer_bank(db,exclude_application_id=app.id)
+        result=run_generic_browser(p,j,app,target,resume_path=package['resume'].file_path,cover_letter_path=package['cover_letter'].file_path,submit=submit,extra_links=extra_links,approved_review_answers=approved,answer_bank=bank)
         run.output_summary=f"{len(result.filled_fields)} fields; {len(result.uploaded_files)} files; {result.status}"
     record_browser_result(db, app, result)
     if result.submitted:
