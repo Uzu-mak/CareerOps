@@ -24,7 +24,7 @@
           {% set spec = ui.source_types.get(s.source_type, {}) %}
           {% set errored = (s.last_status or '').startswith('error') %}
           <tr>
-            <td class="primary-cell"><strong>{{ s.name }}</strong><span>{{ spec.label or s.source_type }}{% if s.source_type in ('greenhouse', 'lever', 'ashby') %} · <span class="mono">{{ s.token_or_url }}</span>{% endif %}</span></td>
+            <td class="primary-cell"><strong>{{ s.name }}{% if s.discovered_from %} <span class="badge info" title="CareerOps added this board after seeing it linked from {{ s.discovered_from }}">found via {{ s.discovered_from }}</span>{% endif %}</strong><span>{{ spec.label or s.source_type }}{% if s.source_type in ('greenhouse', 'lever', 'ashby') %} · <span class="mono">{{ s.token_or_url }}</span>{% endif %}</span></td>
             <td>
               {% if errored %}<span class="badge bad" title="{{ s.last_status }}">error</span> <span class="soft" style="font-size:12px">{{ s.last_status[7:70] }}{% if s.last_status | length > 70 %}…{% endif %}</span>
               {% elif s.last_run_at %}<span class="row" style="gap:8px"><span class="dot"></span><span><time datetime="{{ s.last_run_at | iso }}" data-relative>{{ s.last_run_at | short_dt }}</time> <span class="soft">· {{ s.last_count }} found</span></span></span>
@@ -97,7 +97,7 @@
             {% set t = r.totals or {} %}
             <div class="item {{ 'good' if r.status == 'success' else 'bad' if r.status == 'error' else '' }}">
               <strong><time datetime="{{ r.started_at | iso }}" data-relative>{{ r.started_at | short_dt }}</time> · {{ r.trigger }}</strong>
-              <span>{{ t.get('fetched', 0) }} fetched · {{ t.get('created', 0) }} new · {{ t.get('analyzed', 0) }} analyzed{% if t.get('errors') %} · {{ t['errors'] | length }} error{{ 's' if t['errors'] | length != 1 }}{% endif %}{% if r.status == 'running' %} · running{% endif %}</span>
+              <span>{{ t.get('fetched', 0) }} fetched · {{ t.get('created', 0) }} new · {{ t.get('analyzed', 0) }} analyzed{% if t.get('boards_discovered') %} · {{ t['boards_discovered'] | length }} new compan{{ 'ies' if t['boards_discovered'] | length != 1 else 'y' }} found{% endif %}{% if t.get('errors') %} · {{ t['errors'] | length }} error{{ 's' if t['errors'] | length != 1 }}{% endif %}{% if r.status == 'running' %} · running{% endif %}</span>
             </div>
           {% else %}<p class="muted">No scans yet.</p>{% endfor %}
         </div>

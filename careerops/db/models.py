@@ -280,6 +280,8 @@ class SourceConfig(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Set when CareerOps added this board itself after seeing it linked from another source.
+    discovered_from: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 class NotificationPreference(Base):

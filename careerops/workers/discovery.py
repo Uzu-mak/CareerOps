@@ -11,6 +11,10 @@ from careerops.sources.generic import GenericPageSource
 from careerops.sources.adzuna import AdzunaSource
 from careerops.sources.usajobs import USAJobsSource
 from careerops.sources.company_career import CompanyCareerSource
+from careerops.sources.hn_hiring import HNHiringSource
+from careerops.sources.remotive import RemotiveSource
+from careerops.services.board_discovery import discover_boards
+from careerops.core.config import settings
 from careerops.services.ingest import upsert_job
 from careerops.agents.orchestrator import analyze_job
 from careerops.services.search_policy import should_keep_discovered_job
@@ -41,14 +45,27 @@ def make_source(cfg: SourceConfig, profile: CandidateProfile | None):
     if cfg.source_type == 'usajobs':
         if not profile: raise RuntimeError('Candidate profile required for USAJOBS search')
         return USAJobsSource(profile,results_per_query=int(payload.get('results_per_query',50)))
+    if cfg.source_type == 'hn_hiring': return HNHiringSource(max_posts=int(payload.get('max_posts',1000)))
+    if cfg.source_type == 'remotive': return RemotiveSource(categories=payload.get('categories'),limit=int(payload.get('limit',150)))
     raise ValueError(f'Unsupported source_type={cfg.source_type}')
 
 
+ATS_TYPES={'greenhouse','lever','ashby'}
+ORIGIN={'hn_hiring':'Hacker News','remotive':'Remotive','adzuna':'Adzuna','usajobs':'USAJOBS','generic':'a job page','company_career':'a careers site'}
+
+
+# Providers that ask API users to limit calls: respected even by "Scan now".
+MIN_INTERVAL_MINUTES={'remotive':360}
+
+
 def _due(cfg: SourceConfig, force: bool=False) -> bool:
-    if force or cfg.last_run_at is None: return True
+    if cfg.last_run_at is None: return True
     last=cfg.last_run_at
     if last.tzinfo is None: last=last.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc)-last >= timedelta(minutes=max(1,cfg.scan_interval_minutes or 15))
+    age=datetime.now(timezone.utc)-last
+    if age < timedelta(minutes=MIN_INTERVAL_MINUTES.get(cfg.source_type,0)): return False
+    if force: return True
+    return age >= timedelta(minutes=max(1,cfg.scan_interval_minutes or 15))
 
 
 async def scan_enabled_sources(analyze_new: bool = True, force: bool=False, trigger: str='watchtower') -> dict:
@@ -67,12 +84,14 @@ async def scan_enabled_sources(analyze_new: bool = True, force: bool=False, trig
             if not _due(cfg,force): totals['sources_skipped_not_due']+=1; continue
             totals['sources']+=1
             try:
-                fetched=await make_source(cfg,profile).fetch(); new_jobs=[]
+                fetched=await make_source(cfg,profile).fetch(); new_jobs=[]; kept=[]
                 for item in fetched:
                     totals['fetched']+=1
-                    if not item.get('company') or item.get('company')=='Unknown': item['company']=cfg.name
+                    # ATS boards only know their slug ("palantir"); use the source's display name.
+                    if cfg.source_type in ATS_TYPES or not item.get('company') or item.get('company')=='Unknown': item['company']=cfg.name
                     if profile and not should_keep_discovered_job(profile,item):
                         totals['location_filtered']+=1; continue
+                    kept.append(item)
                     job,created=upsert_job(db,item); totals['created']+=int(created)
                     if created: new_jobs.append(job)
                 if analyze_new and profile:
@@ -90,6 +109,9 @@ async def scan_enabled_sources(analyze_new: bool = True, force: bool=False, trig
                                     if result.get('submitted'): notify_application_event(db,'submitted',app,job,result.get('reason',''))
                                     elif app.requires_human_review: notify_application_event(db,'human_review',app,job,result.get('reason',''))
                 cfg.last_run_at=datetime.now(timezone.utc); cfg.last_status='success'; cfg.last_count=len(fetched); db.add(cfg); db.commit()
+                if settings.auto_discover_boards and cfg.source_type not in ATS_TYPES and kept:
+                    added=discover_boards(db,kept,ORIGIN.get(cfg.source_type,cfg.name),limit=settings.auto_discover_max_per_scan)
+                    if added: totals.setdefault('boards_discovered',[]).extend(added)
             except Exception as exc:
                 db.rollback()  # a failed insert poisons the session; reset it before recording the error
                 cfg.last_run_at=datetime.now(timezone.utc); cfg.last_status=f'error: {str(exc)[:220]}'; db.add(cfg); db.commit(); totals['errors'].append({'source':cfg.name,'error':str(exc)})

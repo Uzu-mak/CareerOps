@@ -9,6 +9,8 @@ CareerOps is a personal AI job-search control tower built around **Discover → 
 ### Discover
 
 - Greenhouse, Lever, and Ashby public ATS feeds.
+- **Small companies and startups:** the monthly Hacker News "Who is hiring?" thread (public Algolia API, no key) and Remotive's remote-jobs API (no key; called at most 4 times a day as Remotive asks, with links back to Remotive).
+- **Automatic company discovery:** when any source links to a company's Greenhouse, Lever or Ashby board, CareerOps adds that whole board as a source (up to 15 per scan, `AUTO_DISCOVER_BOARDS=false` to turn off). Those are also the boards the browser agent can apply to.
 - Generic public job pages.
 - Public company-career watcher with schema.org `JobPosting` extraction and a bounded Chromium-rendered fallback for JavaScript career pages.
 - Starter priority watchlist: OpenAI, Palantir, SpaceX, Microsoft, Amazon, Boeing, Meta, Salesforce.
@@ -258,6 +260,7 @@ See `FEATURE_MATRIX.md` for what is implemented, what needs credentials, and wha
 
 ## Changelog
 
+- **Small-company discovery.** Hacker News "Who is hiring?" and Remotive sources, and automatic addition of Greenhouse/Lever/Ashby boards linked from any source.
 - **Interface rebuild.** New design matching the Digital Twin; Jobs page with search, filters, sorting and pagination (server-side, one query); job tabs with typed answer inputs (Yes/No, salary, free text), dry run and document viewer; tag inputs with autocomplete for skills, roles and locations; skills auto-filled from the uploaded resume; Sources & automation page with per-source switches and frequency; server-side batch analysis; setup checklist; mobile layout.
 - **Hosting.** Google sign-in for hosted instances (fails closed without it), Cloud Run guide, `$PORT` support, `.dockerignore` so `.env` is never baked into images, Compose reads `.env` directly.
 - **Browser agent rebuild.** Frame-aware form scanning, answer planning, React-Select/autocomplete/Yes-No button support, Lever/Ashby/Greenhouse-embed entry, required-question pauses with exact question text, answer bank, EEO decline preference, visible-only CAPTCHA detection, and confirmation that must appear after submit.

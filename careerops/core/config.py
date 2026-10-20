@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     auto_submit_enabled: bool = False
+    # Add Greenhouse/Lever/Ashby boards linked from other sources as new sources (small companies).
+    auto_discover_boards: bool = True
+    auto_discover_max_per_scan: int = 15
     seed_demo_jobs: bool = False
     browser_headless: bool = True
     chromium_executable: str = '/usr/bin/chromium'

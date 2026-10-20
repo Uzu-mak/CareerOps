@@ -67,6 +67,8 @@ SOURCE_TYPES = {
     'generic': {'label': 'Single job page', 'field': 'Job page URL', 'placeholder': 'https://example.com/jobs/123', 'key': False},
     'adzuna': {'label': 'Adzuna (broad market)', 'field': 'Search config (JSON, optional)', 'placeholder': '{"country": "us"}', 'key': True},
     'usajobs': {'label': 'USAJOBS (federal)', 'field': 'Search config (JSON, optional)', 'placeholder': '{}', 'key': True},
+    'hn_hiring': {'label': 'Hacker News: Who is hiring?', 'field': 'Thread', 'placeholder': 'latest', 'key': False},
+    'remotive': {'label': 'Remotive remote jobs', 'field': 'Categories (JSON)', 'placeholder': '{"categories": ["software-dev", "data"]}', 'key': False},
     'linkedin_alerts': {'label': 'LinkedIn alert emails', 'field': 'Label', 'placeholder': 'linkedin', 'key': False},
     'indeed_alerts': {'label': 'Indeed alert emails', 'field': 'Label', 'placeholder': 'indeed', 'key': False},
 }

@@ -18,6 +18,8 @@ def starter_source_specs():
         ('company_career','Boeing','https://jobs.boeing.com/search-jobs',True,60,None),
         ('company_career','Meta','https://www.metacareers.com/jobs',True,60,None),
         ('company_career','Salesforce','https://careers.salesforce.com/en/jobs/',True,60,None),
+        ('hn_hiring','Hacker News: Who is hiring?','latest',True,720,None),
+        ('remotive','Remotive remote jobs','{"categories":["software-dev","data"]}',True,720,None),
         ('linkedin_alerts','LinkedIn Job Alert Inbox','inbox://linkedin',True,15,'waiting for forwarded/imported alerts'),
         ('indeed_alerts','Indeed Job Alert Inbox','inbox://indeed',True,15,'waiting for forwarded/imported alerts'),
         ('adzuna','Adzuna Broad Market','{"country":"us","results_per_query":20}',bool(settings.adzuna_app_id and settings.adzuna_app_key),60,None if settings.adzuna_app_id and settings.adzuna_app_key else 'setup needed: ADZUNA_APP_ID / ADZUNA_APP_KEY'),
@@ -45,6 +47,7 @@ def _ensure_schema_compatibility():
         "ALTER TABLE source_configs ALTER COLUMN last_status TYPE TEXT",
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS eeo_preference VARCHAR(20)",
         "ALTER TABLE job_postings ALTER COLUMN location TYPE TEXT",
+        "ALTER TABLE source_configs ADD COLUMN IF NOT EXISTS discovered_from VARCHAR(80)",
         "ALTER TABLE job_postings ALTER COLUMN source_job_id TYPE TEXT",
     ]
     with engine.begin() as conn:
