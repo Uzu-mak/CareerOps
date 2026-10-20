@@ -258,6 +258,7 @@ See `FEATURE_MATRIX.md` for what is implemented, what needs credentials, and wha
 
 ## Changelog
 
+- **Interface rebuild.** New design matching the Digital Twin; Jobs page with search, filters, sorting and pagination (server-side, one query); job tabs with typed answer inputs (Yes/No, salary, free text), dry run and document viewer; tag inputs with autocomplete for skills, roles and locations; skills auto-filled from the uploaded resume; Sources & automation page with per-source switches and frequency; server-side batch analysis; setup checklist; mobile layout.
 - **Hosting.** Google sign-in for hosted instances (fails closed without it), Cloud Run guide, `$PORT` support, `.dockerignore` so `.env` is never baked into images, Compose reads `.env` directly.
 - **Browser agent rebuild.** Frame-aware form scanning, answer planning, React-Select/autocomplete/Yes-No button support, Lever/Ashby/Greenhouse-embed entry, required-question pauses with exact question text, answer bank, EEO decline preference, visible-only CAPTCHA detection, and confirmation that must appear after submit.
 - **LLM job-description extraction** (OpenAI or Bedrock), validated and merged with rules.

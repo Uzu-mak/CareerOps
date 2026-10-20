@@ -1,31 +1,112 @@
-{% extends 'base.html' %}{% block title %}CareerOps Notifications{% endblock %}{% block content %}
-<header class='top'><div><div class='eyebrow'>ALERTS + INBOX INGESTION</div><h1>Notifications</h1><p>CareerOps can alert you when a matching job appears, when an A/A+ role is found, when an application needs review, and when submission is confirmed.</p></div><div class='actions'><button class='btn secondary' onclick='testNotification()'>Send test</button><button class='btn secondary' onclick='pollAlerts()'>Poll alert inbox</button></div></header>
-<section class='grid2'>
-<div class='panel'><span class='eyebrow'>NOTIFICATION POLICY</span><h2>When to notify me</h2>
-<form id='notificationForm'>
-<label><input id='notificationsEnabled' type='checkbox' {% if pref.enabled %}checked{% endif %}> Notifications enabled</label>
-<div class='checkgrid'>
-<label><input id='notifyNewMatch' type='checkbox' {% if pref.notify_new_match %}checked{% endif %}> New matching job</label>
-<label><input id='notifyHighFit' type='checkbox' {% if pref.notify_high_fit %}checked{% endif %}> A/A+ opportunity</label>
-<label><input id='notifyHumanReview' type='checkbox' {% if pref.notify_human_review %}checked{% endif %}> Human review needed</label>
-<label><input id='notifySubmitted' type='checkbox' {% if pref.notify_submitted %}checked{% endif %}> Application confirmed</label>
-<label><input id='notifyFailed' type='checkbox' {% if pref.notify_failed %}checked{% endif %}> Application failed</label>
+{% extends 'base.html' %}
+{% block title %}Notifications{% endblock %}
+{% macro toggle(name, title, sub, on) -%}
+  <label class="switch"><span class="switch-text"><strong>{{ title }}</strong>{% if sub %}<span>{{ sub }}</span>{% endif %}</span><input type="checkbox" name="{{ name }}" {{ 'checked' if on }}><span class="track"></span></label>
+{%- endmacro %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Alerts</div>
+    <h1>Notifications</h1>
+    <p>Get told when a strong match appears, when an application needs you, and when one is confirmed — in the app, by email, Slack, Discord or Telegram.</p>
+  </div>
+  <div class="actions">
+    <button class="btn" type="button" data-action="poll-alerts"><svg class="icon"><use href="#i-refresh"/></svg>Check alert inbox</button>
+    <button class="btn" type="button" data-action="test-notification"><svg class="icon"><use href="#i-send"/></svg>Send test</button>
+  </div>
+</header>
+
+<div class="grid grid-main">
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><div><div class="eyebrow">Inbox · {{ unread }} unread</div><h2>Recent events</h2></div>
+        {% if unread %}<button class="btn sm" type="button" data-action="mark-all-read"><svg class="icon"><use href="#i-check"/></svg>Mark all read</button>{% endif %}</div>
+      <div class="card-body flush">
+        <div class="list">
+          {% for e in events %}
+            <div class="list-item {{ 'unread' if not e.read }}">
+              <span class="dot {{ 'off' if e.read else ('warn' if e.event_type == 'human_review' else 'bad' if e.event_type == 'failed' else '') }}"></span>
+              <div class="grow"><strong>{{ e.title }}</strong><span class="sub">{{ e.message }}</span>
+                <span class="soft" style="font-size:11.5px"><time datetime="{{ e.created_at | iso }}" data-relative>{{ e.created_at | short_dt }}</time> · {{ e.event_type | replace('_', ' ') }}{% if e.channels_requested %} · {{ e.channels_requested | join(', ') }}{% endif %}</span></div>
+              {% if e.job_id %}<a class="btn sm ghost" href="/jobs/{{ e.job_id }}">Open job</a>{% endif %}
+              {% if not e.read %}<button class="btn sm ghost icon-only" type="button" data-action="mark-read" data-id="{{ e.id }}" aria-label="Mark read" title="Mark read"><svg class="icon"><use href="#i-check"/></svg></button>{% endif %}
+            </div>
+          {% else %}
+            <div class="empty"><svg class="icon"><use href="#i-bell"/></svg><strong>No notifications yet</strong><span>They appear after scans, applications, or a test.</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><div class="eyebrow">LinkedIn &amp; Indeed</div><h2>Job-alert emails</h2>
+        <p>CareerOps reads the alert emails these sites send you (it never logs in to them), pulls out the job links, and scores them.</p></div>
+        {% if imap_configured %}<span class="badge good">inbox connected</span>{% else %}<span class="badge neutral">inbox not connected</span>{% endif %}</div>
+      <div class="card-body">
+        {% if not imap_configured %}<div class="callout" style="margin-bottom:14px"><svg class="icon"><use href="#i-info"/></svg><div>To check automatically every scan, set <code>JOB_ALERT_IMAP_HOST</code>, <code>JOB_ALERT_IMAP_USER</code> and <code>JOB_ALERT_IMAP_PASSWORD</code> (for Gmail, an app password) in <code>.env</code>. Meanwhile, paste an alert below.</div></div>{% endif %}
+        <form class="form" data-form="ingest-alert">
+          <div class="form-grid">
+            <div class="field"><label for="al-provider">From</label><select class="select" id="al-provider" name="provider"><option value="">Detect automatically</option><option value="linkedin">LinkedIn</option><option value="indeed">Indeed</option></select></div>
+            <div class="field"><label for="al-subject">Subject</label><input class="input" id="al-subject" name="subject" placeholder="New jobs for AI Engineer"></div>
+            <div class="field full"><label for="al-text">Email body <span class="req">*</span></label><textarea class="textarea" id="al-text" name="text" rows="5" required placeholder="Paste the whole alert email, links included"></textarea></div>
+          </div>
+          <div class="actions"><button class="btn primary" type="submit">Import &amp; score</button></div>
+        </form>
+      </div>
+      {% if alerts %}
+      <div class="card-body flush" style="border-top:1px solid var(--line)">
+        <div class="list">
+          {% for a in alerts[:8] %}
+            <div class="list-item"><div class="grow"><strong>{{ a.subject or 'Job alert' }}</strong><span class="sub">{{ a.provider | title }} · {{ a.discovered_urls | length }} link{{ 's' if a.discovered_urls | length != 1 }} · {{ a.jobs_created }} job{{ 's' if a.jobs_created != 1 }} added</span></div>
+              <span class="badge {{ 'good' if a.processed else 'warn' }}">{{ 'done' if a.processed else 'pending' }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <form class="card sticky" data-form="notifications">
+    <div class="card-head"><div><div class="eyebrow">Settings</div><h2>When and where to notify</h2></div></div>
+    <div class="card-body">
+      {{ toggle('enabled', 'Notifications', 'Master switch for every channel', pref.enabled) }}
+      <div class="divider"></div>
+      <div class="field-label" style="margin-bottom:4px">Events</div>
+      {{ toggle('notify_new_match', 'New matching job', 'Above your minimum fit', pref.notify_new_match) }}
+      {{ toggle('notify_high_fit', 'A / A+ opportunity', 'Above your urgent threshold', pref.notify_high_fit) }}
+      {{ toggle('notify_human_review', 'Application needs you', 'Paused on a question or sign-in', pref.notify_human_review) }}
+      {{ toggle('notify_submitted', 'Application confirmed', 'Employer confirmation captured', pref.notify_submitted) }}
+      {{ toggle('notify_failed', 'Application failed', 'Browser or portal error', pref.notify_failed) }}
+      <div class="divider"></div>
+      <div class="field"><label for="minfitN">Minimum fit for new-job alerts</label>
+        <div class="range-row"><input id="minfitN" type="range" name="minimum_fit_score" min="0" max="100" value="{{ pref.minimum_fit_score }}" data-output="minfitNOut"><output id="minfitNOut">{{ pref.minimum_fit_score }}</output></div></div>
+      <div class="field" style="margin-top:12px"><label for="urgent">Urgent threshold</label>
+        <div class="range-row"><input id="urgent" type="range" name="urgent_fit_score" min="0" max="100" value="{{ pref.urgent_fit_score }}" data-output="urgentOut"><output id="urgentOut">{{ pref.urgent_fit_score }}</output></div></div>
+      <div class="divider"></div>
+      <div class="field-label" style="margin-bottom:4px">Channels</div>
+      <details class="disclosure" {{ 'open' if pref.email_enabled }} style="margin:0 -20px">
+        <summary><span class="dot {{ '' if pref.email_enabled and pref.email_to else 'off' }}"></span>Email <span class="soft" style="font-size:12px">Amazon SES</span></summary>
+        <div class="disclosure-body form">{{ toggle('email_enabled', 'Send email', '', pref.email_enabled) }}
+          <div class="field"><label for="n-email">Send to</label><input class="input" id="n-email" name="email_to" type="email" value="{{ pref.email_to or '' }}" placeholder="you@gmail.com"></div></div>
+      </details>
+      <details class="disclosure" {{ 'open' if pref.slack_enabled }} style="margin:0 -20px">
+        <summary><span class="dot {{ '' if pref.slack_enabled and pref.slack_webhook_url else 'off' }}"></span>Slack</summary>
+        <div class="disclosure-body form">{{ toggle('slack_enabled', 'Post to Slack', '', pref.slack_enabled) }}
+          <div class="field"><label for="n-slack">Incoming webhook URL</label><input class="input" id="n-slack" name="slack_webhook_url" type="url" value="{{ pref.slack_webhook_url or '' }}" placeholder="https://hooks.slack.com/services/…"></div></div>
+      </details>
+      <details class="disclosure" {{ 'open' if pref.discord_enabled }} style="margin:0 -20px">
+        <summary><span class="dot {{ '' if pref.discord_enabled and pref.discord_webhook_url else 'off' }}"></span>Discord</summary>
+        <div class="disclosure-body form">{{ toggle('discord_enabled', 'Post to Discord', '', pref.discord_enabled) }}
+          <div class="field"><label for="n-discord">Webhook URL</label><input class="input" id="n-discord" name="discord_webhook_url" type="url" value="{{ pref.discord_webhook_url or '' }}" placeholder="https://discord.com/api/webhooks/…"></div></div>
+      </details>
+      <details class="disclosure" {{ 'open' if pref.telegram_enabled }} style="margin:0 -20px">
+        <summary><span class="dot {{ '' if pref.telegram_enabled and pref.telegram_bot_token else 'off' }}"></span>Telegram</summary>
+        <div class="disclosure-body form">{{ toggle('telegram_enabled', 'Message on Telegram', '', pref.telegram_enabled) }}
+          <div class="field"><label for="n-tg-token">Bot token</label><input class="input" id="n-tg-token" name="telegram_bot_token" type="password" value="{{ pref.telegram_bot_token or '' }}" autocomplete="off" placeholder="From @BotFather"></div>
+          <div class="field"><label for="n-tg-chat">Chat ID</label><input class="input" id="n-tg-chat" name="telegram_chat_id" value="{{ pref.telegram_chat_id or '' }}"></div></div>
+      </details>
+    </div>
+    <div class="card-foot"><button class="btn ghost" type="button" data-action="test-notification">Send test</button><button class="btn primary" type="submit">Save settings</button></div>
+  </form>
 </div>
-<label>Minimum fit score for new-job alerts<input id='notifyMinFit' type='number' min='0' max='100' value='{{pref.minimum_fit_score}}'></label>
-<label>Urgent / high-fit threshold<input id='notifyUrgentFit' type='number' min='0' max='100' value='{{pref.urgent_fit_score}}'></label>
-<h3>Channels</h3>
-<label><input id='emailEnabled' type='checkbox' {% if pref.email_enabled %}checked{% endif %}> Email</label><label>Email destination<input id='emailTo' value='{{pref.email_to or ""}}' placeholder='you@example.com'></label>
-<label><input id='slackEnabled' type='checkbox' {% if pref.slack_enabled %}checked{% endif %}> Slack webhook</label><label>Slack webhook URL<input id='slackWebhook' value='{{pref.slack_webhook_url or ""}}'></label>
-<label><input id='discordEnabled' type='checkbox' {% if pref.discord_enabled %}checked{% endif %}> Discord webhook</label><label>Discord webhook URL<input id='discordWebhook' value='{{pref.discord_webhook_url or ""}}'></label>
-<label><input id='telegramEnabled' type='checkbox' {% if pref.telegram_enabled %}checked{% endif %}> Telegram</label><label>Telegram bot token<input id='telegramToken' value='{{pref.telegram_bot_token or ""}}'></label><label>Telegram chat ID<input id='telegramChat' value='{{pref.telegram_chat_id or ""}}'></label>
-<button class='btn' type='button' onclick='saveNotificationSettings()'>Save notification settings</button>
-</form></div>
-<div class='panel'><span class='eyebrow'>LINKEDIN + INDEED ALERT INBOX</span><h2>Job-alert ingestion</h2><p>CareerOps does not scrape logged-in LinkedIn/Indeed pages. Instead it consumes the job-alert emails those services send you, extracts job links, deduplicates them, analyzes fit, and pushes matching jobs into Watchtower.</p>
-<div class='review-box'><strong>Automatic IMAP polling: {{'CONFIGURED' if imap_configured else 'NOT CONFIGURED'}}</strong><span>Set JOB_ALERT_IMAP_HOST / USER / PASSWORD in your .env or AWS Secrets Manager. The Watchtower checks unseen LinkedIn/Indeed alert emails every scan.</span></div>
-<h3>Paste/forward an alert manually</h3><label>Provider<select id='alertProvider'><option value='linkedin'>LinkedIn</option><option value='indeed'>Indeed</option><option value=''>Auto-detect</option></select></label><label>Subject<input id='alertSubject'></label><label>Email body<textarea id='alertText' rows='8' placeholder='Paste the alert email body or forwarded message'></textarea></label><button class='btn' onclick='ingestAlert()'>Ingest & analyze</button>
-<h3>Recent alert messages</h3>{% for a in alerts %}<div class='constraint'><div><strong>{{a.provider|title}} · {{a.subject or 'Job alert'}}</strong><span>{{a.received_at}} · {{a.discovered_urls|length}} URLs · {{a.jobs_created}} jobs created</span></div><span class='status {{"pass" if a.processed else "review"}}'>{{"DONE" if a.processed else "PENDING"}}</span></div>{% else %}<p class='muted'>No alert emails imported yet.</p>{% endfor %}</div>
-</section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>IN-APP NOTIFICATION CENTER</span><h2>Recent events</h2></div><div class='pill'>{{unread}} unread</div></div>
-{% for e in events %}<div class='constraint notification-row'><div><strong>{{e.title}}</strong><span>{{e.message}}</span><small>{{e.created_at}} · {{e.event_type}} · {{e.status}}</small></div><div>{% if e.job_id %}<button class='mini' onclick='location.href="/jobs/{{e.job_id}}"'>Open job</button>{% endif %}{% if not e.read %}<button class='mini' onclick='markNotificationRead({{e.id}})'>Mark read</button>{% endif %}</div></div>{% else %}<p class='muted'>No notifications yet. Run a job scan or send a test notification.</p>{% endfor %}
-</section>
 {% endblock %}

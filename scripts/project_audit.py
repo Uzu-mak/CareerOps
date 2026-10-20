@@ -22,7 +22,7 @@ required=[
 for rel in required: expect(f'file:{rel}',(ROOT/rel).exists())
 
 expect('dashboard routes',contains('careerops/main.py',"'/profile'","'/journal'","'/applications'","'/notifications'"))
-expect('source types',contains('careerops/api/routes.py','company_career','adzuna','usajobs','linkedin_alerts','indeed_alerts'))
+expect('source types',contains('careerops/core/ui_options.py','company_career','adzuna','usajobs','linkedin_alerts','indeed_alerts') and contains('careerops/api/routes.py','SOURCE_TYPES'))
 expect('priority company seeds',contains('careerops/db/init.py','SpaceX','Microsoft','Amazon','Boeing','Meta','Salesforce','OpenAI','Palantir'))
 expect('broad market adapters',contains('careerops/workers/discovery.py','AdzunaSource','USAJobsSource','CompanyCareerSource'))
 expect('alert inbox',contains('careerops/workers/discovery.py','poll_imap_alerts','process_pending_alerts'))

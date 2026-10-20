@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Opportunity queue</div>
+    <h1>Jobs</h1>
+    <p>Every job CareerOps has found, scored against your profile. Click a row to see the fit breakdown and apply.</p>
+  </div>
+  <div class="actions">
+    {% if facets.unanalyzed %}
+      <button class="btn" type="button" data-action="analyze-pending" data-total="{{ facets.unanalyzed }}"><svg class="icon"><use href="#i-spark"/></svg>Analyze {{ facets.unanalyzed }} new</button>
+    {% endif %}
+    <button class="btn" type="button" data-open="addJobDialog"><svg class="icon"><use href="#i-plus"/></svg>Add a job</button>
+    <button class="btn primary" type="button" data-action="scan"><svg class="icon"><use href="#i-refresh"/></svg>Scan now</button>
+  </div>
+</header>
+
+<section class="card" id="jobsBrowser">
+  <form id="jobFilters" class="toolbar" role="search" autocomplete="off">
+    <label class="search"><span class="sr-only">Search jobs</span><svg class="icon"><use href="#i-search"/></svg>
+      <input class="input" type="search" name="q" placeholder="Search title, company or location"></label>
+    <label><span class="sr-only">Decision</span>
+      <select class="select" name="decision">
+        <option value="">Any decision</option>
+        {% for v, label in ui.decisions %}<option value="{{ v }}">{{ label }}{% if facets.decisions.get(v) %} ({{ facets.decisions[v] }}){% endif %}</option>{% endfor %}
+        <option value="UNANALYZED">Not analyzed ({{ facets.unanalyzed }})</option>
+      </select></label>
+    <label><span class="sr-only">Priority</span>
+      <select class="select" name="priority">
+        <option value="">Any priority</option>
+        <option value="A+,A">A or A+</option>
+        {% for p in ui.priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select></label>
+    <label><span class="sr-only">Workplace</span>
+      <select class="select" name="workplace">
+        <option value="">Any workplace</option>
+        {% for v, label in ui.workplaces %}<option value="{{ v }}">{{ label }}</option>{% endfor %}
+      </select></label>
+    <label><span class="sr-only">Company</span>
+      <select class="select" name="company">
+        <option value="">All companies</option>
+        {% for c in facets.companies %}<option value="{{ c.name }}">{{ c.name }} ({{ c.count }})</option>{% endfor %}
+      </select></label>
+    <label><span class="sr-only">Sort</span>
+      <select class="select" name="sort" data-default="fit">
+        {% for v, label in ui.job_sorts %}<option value="{{ v }}">{{ label }}</option>{% endfor %}
+      </select></label>
+    <input type="hidden" name="min_fit" value="">
+  </form>
+  <div class="toolbar" style="padding-top:10px;padding-bottom:10px">
+    <div class="filter-chips">
+      <button type="button" data-preset="decision=APPLY">Apply-ready</button>
+      <button type="button" data-preset="min_fit=80">80%+ fit</button>
+      <button type="button" data-preset="workplace=remote">Remote</button>
+      <button type="button" data-preset="decision=UNANALYZED">Not analyzed</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="soft mono" data-count>Loading…</span>
+    <button class="btn sm ghost" type="button" data-reset>Clear filters</button>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Role</th><th class="hide-sm">Location</th><th>Fit</th><th>Decision</th><th class="hide-sm">Application</th><th class="hide-sm">Found</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="pager" data-pager></div>
+</section>
+
+<dialog class="modal wide" id="addJobDialog">
+  <form data-form="add-job">
+    <div class="modal-head"><div><h2>Add a job</h2><p>Paste a role you found yourself. CareerOps analyzes it straight away.</p></div>
+      <button class="btn ghost icon-only" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button></div>
+    <div class="modal-body form-grid">
+      <div class="field"><label for="aj-company">Company <span class="req">*</span></label><input class="input" id="aj-company" name="company" required></div>
+      <div class="field"><label for="aj-title">Role <span class="req">*</span></label><input class="input" id="aj-title" name="title" required list="roleOptions"></div>
+      <div class="field"><label for="aj-location">Location</label><input class="input" id="aj-location" name="location" list="locationOptions" placeholder="Seattle, WA"></div>
+      <div class="field"><label for="aj-workplace">Workplace</label>
+        <select class="select" id="aj-workplace" name="workplace_type"><option value="">Not stated</option>{% for v, label in ui.workplaces %}<option value="{{ v }}">{{ label }}</option>{% endfor %}</select></div>
+      <div class="field full"><label for="aj-url">Application link</label><input class="input" id="aj-url" name="application_url" type="url" placeholder="https://jobs.lever.co/…"><span class="hint">Needed for the browser agent to apply.</span></div>
+      <div class="field full"><label for="aj-desc">Job description <span class="req">*</span></label><textarea class="textarea" id="aj-desc" name="description" rows="9" required></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save &amp; analyze</button></div>
+  </form>
+</dialog>
+<datalist id="roleOptions">{% for r in ui.role_families %}<option value="{{ r }}">{% endfor %}</datalist>
+<datalist id="locationOptions">{% for l in ui.locations %}<option value="{{ l }}">{% endfor %}</datalist>
+{% endblock %}

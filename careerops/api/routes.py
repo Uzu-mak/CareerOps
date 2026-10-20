@@ -30,6 +30,8 @@ from careerops.services.career_memory import parse_metric_lines, evidence_from_j
 from careerops.services.notifications import get_notification_preferences, emit_notification, notify_application_event
 from careerops.services.alert_inbox import store_alert_email, process_pending_alerts
 from careerops.services.imap_alerts import poll_imap_alerts, imap_configured
+from careerops.services.job_search import job_facets, pending_analysis_count, pending_analysis_ids, search_jobs
+from careerops.core.ui_options import APPLICATION_STATUS_VALUES, SCAN_INTERVALS, SOURCE_TYPES, detect_skills, suggest_roles
 
 router=APIRouter(prefix='/api')
 
@@ -63,7 +65,28 @@ async def upload_baseline_resume(resume:UploadFile=File(...), db:Session=Depends
         result=await save_baseline_resume(db,p,resume)
     except ValueError as e:
         raise HTTPException(400,str(e))
-    return {'ok':True,**result}
+    # Fill an empty profile straight from the resume; otherwise just suggest.
+    detected=detect_skills(p.baseline_resume_text or '')
+    added=[]
+    if not p.skills and detected:
+        p.skills=detected; added=detected
+    if not p.role_families:
+        roles=suggest_roles(p.baseline_resume_text or '')
+        if roles: p.role_families=roles
+    db.add(p); db.commit()
+    return {'ok':True,**result,'skills_detected':detected,'skills_added':added}
+
+@router.get('/profile/suggestions')
+def profile_suggestions(db:Session=Depends(get_db)):
+    """Skills and role families found in the master resume and journal that the profile does not list yet."""
+    p=db.scalar(select(CandidateProfile).limit(1))
+    if not p: raise HTTPException(404,'Profile not configured')
+    journal=' '.join(' '.join([x.what_built or '', ' '.join(x.skills or [])]) for x in db.scalars(select(CareerJournalEntry).where(CareerJournalEntry.profile_id==p.id)).all())
+    text=(p.baseline_resume_text or '')+' '+journal
+    have={x.lower() for x in (p.skills or [])}; roles={x.lower() for x in (p.role_families or [])}
+    return {'skills':[x for x in detect_skills(text) if x.lower() not in have],
+            'role_families':[x for x in suggest_roles(text) if x.lower() not in roles],
+            'has_resume':bool(p.baseline_resume_text)}
 
 @router.get('/profile/resume/download')
 def download_baseline_resume(db:Session=Depends(get_db)):
@@ -81,6 +104,27 @@ def jobs(db:Session=Depends(get_db)):
         out.append({'id':j.id,'company':j.company,'title':j.title,'location':j.location,'salary_min':j.salary_min,'salary_max':j.salary_max,'source':j.source,'ats':j.ats,'status':j.status,
                     'fit_score':a.fit_score if a else None,'priority':a.priority if a else None,'action':a.recommended_action if a else None,'hard_filter':a.hard_filter_status if a else None})
     return out
+
+@router.get('/jobs/search')
+def jobs_search(q:str='', decision:str='', priority:str='', workplace:str='', company:str='', min_fit:int=Query(0,ge=0,le=100),
+                sort:str='fit', page:int=Query(1,ge=1), page_size:int=Query(25,ge=5,le=100), db:Session=Depends(get_db)):
+    return search_jobs(db,q=q,decision=decision,priority=priority,workplace=workplace,company=company,min_fit=min_fit,sort=sort,page=page,page_size=page_size)
+
+@router.get('/jobs/facets')
+def jobs_facets(db:Session=Depends(get_db)):
+    return job_facets(db)
+
+@router.post('/jobs/analyze-pending')
+def analyze_pending(limit:int=Query(20,ge=1,le=100), db:Session=Depends(get_db)):
+    """Analyze jobs that have never been analyzed, a batch at a time (the UI calls it until remaining is 0)."""
+    done=0; errors=[]
+    for job_id in pending_analysis_ids(db,limit):
+        job=db.get(JobPosting,job_id)
+        try:
+            analyze_job(db,job); done+=1
+        except Exception as exc:
+            db.rollback(); errors.append({'job_id':job_id,'error':str(exc)[:200]})
+    return {'analyzed':done,'remaining':pending_analysis_count(db),'errors':errors}
 
 @router.get('/jobs/{job_id}')
 def job_detail(job_id:int, db:Session=Depends(get_db)):
@@ -218,7 +262,9 @@ def list_sources(db:Session=Depends(get_db)):
 
 @router.post('/sources')
 def create_source(source_type:str=Form(...), name:str=Form(...), token_or_url:str=Form(...), enabled:bool=Form(True), scan_interval_minutes:int=Form(240), db:Session=Depends(get_db)):
-    if source_type not in {'greenhouse','lever','ashby','generic','company_career','adzuna','usajobs','linkedin_alerts','indeed_alerts'}: raise HTTPException(400,'Unsupported source type')
+    if source_type not in SOURCE_TYPES: raise HTTPException(400,'Unsupported source type')
+    if not name.strip() or not token_or_url.strip(): raise HTTPException(400,'Name and board/URL are required')
+    name=name.strip(); token_or_url=token_or_url.strip()
     x=db.scalar(select(SourceConfig).where(SourceConfig.source_type==source_type, SourceConfig.token_or_url==token_or_url))
     if x:
         x.name=name; x.enabled=enabled; x.scan_interval_minutes=scan_interval_minutes
@@ -228,10 +274,16 @@ def create_source(source_type:str=Form(...), name:str=Form(...), token_or_url:st
     return {'id':x.id,'ok':True}
 
 @router.patch('/sources/{source_id}')
-def update_source(source_id:int, enabled:bool=Query(...), db:Session=Depends(get_db)):
+def update_source(source_id:int, enabled:bool|None=Query(None), scan_interval_minutes:int|None=Query(None), name:str|None=Query(None), db:Session=Depends(get_db)):
     x=db.get(SourceConfig,source_id)
     if not x: raise HTTPException(404,'Source not found')
-    x.enabled=enabled; db.add(x); db.commit(); return {'ok':True,'enabled':x.enabled}
+    if enabled is not None: x.enabled=enabled
+    if scan_interval_minutes is not None:
+        if scan_interval_minutes not in {m for m,_ in SCAN_INTERVALS}: raise HTTPException(400,'Unsupported scan interval')
+        x.scan_interval_minutes=scan_interval_minutes
+    if name is not None and name.strip(): x.name=name.strip()
+    db.add(x); db.commit()
+    return {'ok':True,'enabled':x.enabled,'scan_interval_minutes':x.scan_interval_minutes,'name':x.name}
 
 @router.get('/runtime-settings')
 def runtime_settings(db:Session=Depends(get_db)):
@@ -249,8 +301,7 @@ def update_runtime_settings(auto_apply_enabled:bool=Form(...), auto_apply_min_fi
 
 @router.patch('/applications/{application_id}/status')
 def update_application_status(application_id:int, status:str=Query(...), db:Session=Depends(get_db)):
-    allowed={'planned','prepared','review','submitted','interview','offer','rejected','withdrawn'}
-    if status not in allowed: raise HTTPException(400,'Invalid status')
+    if status not in APPLICATION_STATUS_VALUES: raise HTTPException(400,'Invalid status')
     app=db.get(Application,application_id)
     if not app: raise HTTPException(404,'Application not found')
     app.status=status

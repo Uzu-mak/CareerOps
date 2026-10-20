@@ -1,13 +1,232 @@
-{% extends 'base.html' %}{% block title %}{{job.company}} — {{job.title}}{% endblock %}{% block content %}
-<header class='top'><div><a href='/' class='back'>← Opportunity queue</a><div class='eyebrow'>{{job.company}}</div><h1>{{job.title}}</h1><p>{{job.location or 'Location not listed'}} · {{job.workplace_type or 'workplace unspecified'}} · source: {{job.source}}</p></div><div class='actions'><button class='btn secondary' onclick='analyzeJob({{job.id}}, true)'>Analyze</button><button class='btn secondary' onclick='prepareJob({{job.id}})'>Prepare application</button>{% if job.application_url or job.canonical_url %}<button class='btn' onclick='applyCareerOps({{job.id}})'>Apply with CareerOps</button>{% else %}<button class='btn secondary' disabled title='This record has no live application URL'>No live application URL</button>{% endif %}</div></header>
-{% if analysis %}<section class='hero-score'><div class='ring'><strong>{{analysis.fit_score|round|int}}</strong><span>FIT</span></div><div><span class='pill {{analysis.recommended_action|lower}}'>{{analysis.recommended_action}}</span><h2>{{analysis.priority}} priority</h2><p>{{analysis.explanation}}</p></div></section>
-<section class='grid2'><div class='panel'><span class='eyebrow'>HARD CONSTRAINTS</span><h2>Eligibility & policy</h2>{% for key,val in analysis.hard_constraints.items() %}<div class='constraint'><div><strong>{{key|replace('_',' ')|title}}</strong><span>{{val.detail}}</span></div><span class='status {{val.status|lower}}'>{{val.status}}</span></div>{% endfor %}</div>
-<div class='panel'><span class='eyebrow'>TECHNICAL ALIGNMENT</span><h2>Skill evidence</h2><h3>Matched</h3><div class='tags'>{% for s in analysis.matched_skills %}<span class='tag good'>{{s}}</span>{% endfor %}</div><h3>Partial</h3><div class='tags'>{% for s in analysis.partial_skills %}<span class='tag warn'>{{s}}</span>{% endfor %}</div><h3>Gaps</h3><div class='tags'>{% for s in analysis.gap_skills %}<span class='tag bad'>{{s}}</span>{% endfor %}</div></div></section>{% else %}<section class='empty panel'><h2>This role has not been analyzed yet.</h2><button class='btn' onclick='analyzeJob({{job.id}},true)'>Run CareerOps agents</button></section>{% endif %}
-<section class='grid2'><div class='panel'><span class='eyebrow'>APPLICATION PACKAGE</span><h2>Generated artifacts</h2>{% for a in artifacts %}<div class='artifact'><div><strong>{{a.title}}</strong><span>{{a.artifact_type|replace('_',' ')|title}} · Truth guard {{'passed' if a.truth_guard_passed else 'review'}}</span></div>{% if a.file_path %}<a class='mini' href='/api/artifacts/{{a.id}}/download'>Download PDF</a>{% else %}<a class='mini' href='/api/artifacts/{{a.id}}'>View</a>{% endif %}</div>{% else %}<p class='muted'>Prepare the application to generate a tailored resume, cover letter, Q&A plan, and outreach draft.</p>{% endfor %}<div class='actions'><button class='btn' onclick='prepareJob({{job.id}})'>Generate package</button><button class='btn secondary' onclick='simulateApply({{job.id}})'>Simulate browser agent</button>{% if job.application_url or job.canonical_url %}<button class='btn' onclick='applyCareerOps({{job.id}})'>Apply with CareerOps</button>{% else %}<button class='btn secondary' disabled>No live application URL</button>{% endif %}</div>
-{% if application %}<div class='review-box'><strong>Human review: {{ 'required' if application.requires_human_review else 'clear' }}</strong><span>{% if application.requires_human_review %}Click each field below, provide/confirm the answer, and CareerOps will store it with this application.{% else %}All application questions currently have an approved answer path.{% endif %}</span></div>{% endif %}
-{% if review_items %}<div class='review-list'>{% for item in review_items %}<details class='review-item'><summary><div><strong>{{item.question}}</strong><span>{{item.mode}} · click to review</span></div><span class='status review'>REVIEW</span></summary><div class='review-detail'><p><strong>Why CareerOps paused:</strong> {{item.reason}}</p>{% if item.suggested_answer %}<p><strong>Suggested / configured answer:</strong> {{item.suggested_answer}}</p>{% endif %}<input type='hidden' id='reviewQuestion-{{loop.index0}}' value='{{item.question|e}}'><label>Your verified answer<input id='reviewAnswer-{{loop.index0}}' value='{{item.answer or item.suggested_answer or ""}}' placeholder='Enter the exact answer you want CareerOps to use'></label><label>Notes <small>(optional)</small><textarea id='reviewNotes-{{loop.index0}}' rows='2' placeholder='Context CareerOps should remember for this application'>{{item.notes or ''}}</textarea></label><button class='btn' type='button' onclick='saveReviewAnswer({{application.id}}, {{loop.index0}})'>Save & mark resolved</button></div></details>{% endfor %}</div>{% endif %}
+{% extends 'base.html' %}
+{% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
+{% block content %}
+{% set apply_url = job.application_url or job.canonical_url %}
+{% set open_questions = review_items | rejectattr('resolved') | list %}
+<a class="back" href="/jobs"><svg class="icon"><use href="#i-arrow-left"/></svg>Jobs</a>
+<header class="page-header">
+  <div>
+    <div class="eyebrow">{{ job.company }}</div>
+    <h1>{{ job.title }}</h1>
+    <p class="row wrap" style="gap:8px">
+      <span>{{ job.location or 'Location not listed' }}</span>
+      {% if job.workplace_type %}<span class="badge neutral">{{ job.workplace_type }}</span>{% endif %}
+      <span class="badge neutral">{{ salary_range(job.salary_min, job.salary_max) }}</span>
+      <span class="soft">found <time datetime="{{ job.first_seen_at | iso }}" data-relative>{{ job.first_seen_at | short_dt }}</time> via {{ job.source | replace('_', ' ') }}</span>
+    </p>
+  </div>
+  <div class="actions">
+    {% if apply_url %}<a class="btn ghost" href="{{ apply_url }}" target="_blank" rel="noopener">Employer page<svg class="icon"><use href="#i-external"/></svg></a>{% endif %}
+    <button class="btn" type="button" data-action="analyze-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-refresh"/></svg>{{ 'Re-analyze' if analysis else 'Analyze' }}</button>
+    <button class="btn" type="button" data-action="prepare-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-file"/></svg>Prepare documents</button>
+    {% if apply_url %}
+      <button class="btn" type="button" data-action="dry-run" data-id="{{ job.id }}" title="Fill the form without submitting"><svg class="icon"><use href="#i-eye"/></svg>Dry run</button>
+      <button class="btn primary" type="button" data-action="apply" data-id="{{ job.id }}"><svg class="icon"><use href="#i-send"/></svg>Apply</button>
+    {% else %}
+      <button class="btn primary" type="button" disabled title="This job has no application link">No application link</button>
+    {% endif %}
+  </div>
+</header>
+
+{% if open_questions %}
+<div class="callout warn" style="margin-bottom:18px"><svg class="icon"><use href="#i-alert"/></svg>
+  <div><strong>{{ open_questions | length }} question{{ 's' if open_questions | length != 1 }} need your answer</strong> before CareerOps can finish this application. <a class="link" href="#review" data-tab-link>Answer them</a></div></div>
+{% endif %}
+
+<div class="tabs" role="tablist" data-tabs aria-label="Job sections">
+  <button role="tab" aria-controls="overview" aria-selected="true">Overview</button>
+  <button role="tab" aria-controls="review">Review{% if open_questions %}<span class="n">{{ open_questions | length }}</span>{% endif %}</button>
+  <button role="tab" aria-controls="documents">Documents{% if artifacts %}<span class="n" style="color:var(--soft)">{{ artifacts | length }}</span>{% endif %}</button>
+  <button role="tab" aria-controls="evidence">Evidence</button>
+  <button role="tab" aria-controls="activity">Activity</button>
+  <button role="tab" aria-controls="description">Description</button>
 </div>
-<div class='panel'><span class='eyebrow'>JOB INTELLIGENCE</span><h2>Role details</h2><div class='kv'><span>Salary</span><strong>{% if job.salary_min %}${{'{:,.0f}'.format(job.salary_min)}}–${{'{:,.0f}'.format(job.salary_max or job.salary_min)}}{% else %}Not listed{% endif %}</strong><span>Sponsorship</span><strong>{{job.sponsorship_policy}}</strong><span>ATS</span><strong>{{job.ats or 'unknown'}}</strong><span>Required years</span><strong>{{job.required_years if job.required_years is not none else 'not explicit'}}</strong><span>Application</span><strong>{% if job.application_url or job.canonical_url %}<a href='{{job.application_url or job.canonical_url}}' target='_blank' rel='noopener'>Open employer page ↗</a>{% else %}No live URL{% endif %}</strong></div>{% if account_plan %}<div class='review-box'><strong>Portal account plan: {{account_plan.action|replace('_',' ')|title}}</strong><span>{{account_plan.reason}}{% if account_plan.human_required %} CareerOps will pause when ownership verification/password/MFA is required.{% endif %}</span></div>{% endif %}<h3>Responsibilities</h3><ul>{% for r in job.responsibilities %}<li>{{r}}</li>{% endfor %}</ul></div></section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>CAREER MEMORY RETRIEVAL</span><h2>Evidence CareerOps can use for this role</h2></div><a class='btn secondary' href='/journal'>Add today's evidence</a></div><p class='muted'>This includes your structured experience/projects and your daily Build Journal, ranked against this job.</p>{% for e in evidence %}<details class='evidence-card'><summary><div><strong>{{e.title}}</strong><span>{{e.category|replace('_',' ')|title}}{% if e.organization %} · {{e.organization}}{% endif %}{% if e.date_range %} · {{e.date_range}}{% endif %}</span></div><span class='mini'>View evidence</span></summary><div class='evidence-body'><p>{{e.summary}}</p>{% if e.skills %}<div class='tags'>{% for skill in e.skills %}<span class='tag'>{{skill}}</span>{% endfor %}</div>{% endif %}{% if e.verified_metrics %}<h3>Verified metrics</h3><div class='tags'>{% for k,v in e.verified_metrics.items() %}<span class='tag good'>{{k}}: {{v}}</span>{% endfor %}</div>{% endif %}</div></details>{% endfor %}</section>
-<section class='panel'><span class='eyebrow'>OBSERVABILITY</span><h2>Agent run log</h2><table><thead><tr><th>Agent</th><th>Status</th><th>Latency</th><th>Output</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{r.agent_name}}</td><td><span class='status {{r.status}}'>{{r.status}}</span></td><td>{{r.latency_ms}} ms</td><td>{{r.output_summary or ''}}</td></tr>{% else %}<tr><td colspan='4'>No agent runs yet.</td></tr>{% endfor %}</tbody></table></section>
+
+<section id="overview" role="tabpanel">
+  {% if analysis %}
+  {% set f = analysis.fit_score | round | int %}
+  <div class="grid grid-main">
+    <div class="stack">
+      <div class="card hero">
+        <div class="ring" style="--value:{{ f }};--ring-color:{{ 'var(--accent)' if f >= 80 else 'var(--warm)' if f >= 60 else 'var(--danger)' }}"><div><strong>{{ f }}</strong><span>FIT</span></div></div>
+        <div>
+          <div class="row" style="gap:8px"><span class="badge {{ analysis.recommended_action | lower }}">{{ analysis.recommended_action }}</span><span class="badge neutral">{{ analysis.priority }} priority</span><span class="badge {{ analysis.hard_filter_status | lower }}">constraints {{ analysis.hard_filter_status | lower }}</span></div>
+          <p style="margin-top:12px;color:var(--text-2)">{{ analysis.explanation }}</p>
+          <p class="soft" style="margin-top:8px;font-size:12px">Analyzed <time datetime="{{ analysis.created_at | iso }}" data-relative>{{ analysis.created_at | short_dt }}</time></p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="eyebrow">Skills</div><h2>How your skills line up</h2></div></div>
+        <div class="card-body stack" style="gap:14px">
+          <div><div class="field-label" style="margin-bottom:8px">Matched ({{ analysis.matched_skills | length }})</div><div class="tag-list">{% for s in analysis.matched_skills %}<span class="tag good">{{ s }}</span>{% else %}<span class="soft">None</span>{% endfor %}</div></div>
+          <div><div class="field-label" style="margin-bottom:8px">Partial ({{ analysis.partial_skills | length }})</div><div class="tag-list">{% for s in analysis.partial_skills %}<span class="tag warn">{{ s }}</span>{% else %}<span class="soft">None</span>{% endfor %}</div></div>
+          <div><div class="field-label" style="margin-bottom:8px">Gaps ({{ analysis.gap_skills | length }})</div><div class="tag-list">{% for s in analysis.gap_skills %}<span class="tag bad">{{ s }}</span>{% else %}<span class="soft">None</span>{% endfor %}</div>
+            {% if analysis.gap_skills %}<p class="hint soft" style="margin-top:8px;font-size:12px">Have one of these? Add it on your <a class="link" href="/profile#search">profile</a> or log the work in the <a class="link" href="/journal">Build Journal</a>, then re-analyze.</p>{% endif %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><div><div class="eyebrow">Eligibility</div><h2>Hard constraints</h2></div></div>
+        <div class="card-body flush">
+          {% for key, val in analysis.hard_constraints.items() %}
+            <div class="constraint"><div class="grow"><strong>{{ key | replace('_', ' ') | capitalize }}</strong><span>{{ val.detail }}</span></div><span class="badge {{ val.status | lower }}">{{ val.status }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="eyebrow">Role</div><h2>Details</h2></div></div>
+        <div class="card-body">
+          <dl class="kv">
+            <dt>Salary</dt><dd>{{ salary_range(job.salary_min, job.salary_max) }}</dd>
+            <dt>Experience</dt><dd>{{ ('%g+ years' % job.required_years) if job.required_years is not none else 'Not stated' }}</dd>
+            <dt>Sponsorship</dt><dd>{{ job.sponsorship_policy | capitalize }}</dd>
+            <dt>Clearance</dt><dd>{{ 'Required' if job.clearance_required else 'Not mentioned' }}</dd>
+            <dt>Portal</dt><dd>{{ job.ats or 'Unknown' }}</dd>
+            {% if account_plan %}<dt>Sign-in</dt><dd>{{ account_plan.action | replace('_', ' ') | capitalize }}{% if account_plan.human_required %} <span class="badge warn">you</span>{% endif %}</dd>{% endif %}
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="empty"><svg class="icon"><use href="#i-spark"/></svg><strong>Not analyzed yet</strong><span>Score this job against your profile to see fit, gaps and eligibility.</span>
+    <button class="btn primary" type="button" data-action="analyze-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-spark"/></svg>Analyze now</button></div></div>
+  {% endif %}
+</section>
+
+<section id="review" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><div><div class="eyebrow">Your answers</div><h2>Questions CareerOps paused on</h2>
+      <p>Answers here are saved for this application. Non-sensitive ones (like “How did you hear about us?”) are reused on future applications automatically.</p></div></div>
+    <div class="card-body flush">
+      {% for item in review_items %}
+      <div class="review-q {{ 'is-done' if item.resolved }}" data-question="{{ item.question }}">
+        <div class="row between"><h3>{{ item.question }}</h3>{% if item.resolved %}<span class="badge good">Answered</span>{% else %}<span class="badge warn">Needs answer</span>{% endif %}</div>
+        <p class="why">{{ item.reason }}</p>
+        <div class="form-grid">
+          <div class="field {{ 'full' if item.input.kind in ('textarea',) }}">
+            <label for="ans-{{ loop.index }}">Answer</label>
+            {% set current = item.answer or item.suggested_answer or '' %}
+            {% if item.input.kind == 'select' %}
+              <select class="select" id="ans-{{ loop.index }}" name="answer">
+                <option value="">Choose…</option>
+                {% for o in item.input.options %}<option value="{{ o }}" {{ 'selected' if current == o }}>{{ o }}</option>{% endfor %}
+                {% if current and current not in item.input.options %}<option value="{{ current }}" selected>{{ current }}</option>{% endif %}
+              </select>
+            {% elif item.input.kind == 'number' %}
+              <div class="input-group"><span class="addon">$</span><input class="input" id="ans-{{ loop.index }}" name="answer" type="number" min="0" step="1000" value="{{ current }}"></div>
+            {% elif item.input.kind == 'textarea' %}
+              <textarea class="textarea" id="ans-{{ loop.index }}" name="answer" rows="4">{{ current }}</textarea>
+            {% else %}
+              <input class="input" id="ans-{{ loop.index }}" name="answer" value="{{ current }}">
+            {% endif %}
+          </div>
+          <div class="field {{ 'full' if item.input.kind == 'textarea' }}"><label for="note-{{ loop.index }}">Note to self <span class="soft">(optional)</span></label><input class="input" id="note-{{ loop.index }}" name="notes" value="{{ item.notes or '' }}"></div>
+        </div>
+        <div class="actions" style="margin-top:12px"><button class="btn sm primary" type="button" data-action="save-review" data-app="{{ application.id }}"><svg class="icon"><use href="#i-check"/></svg>Save answer</button></div>
+      </div>
+      {% else %}
+        <div class="empty"><svg class="icon"><use href="#i-check"/></svg><strong>No open questions</strong><span>{% if application %}Every question has an answer.{% else %}Run a dry run to see which questions this form asks.{% endif %}</span></div>
+      {% endfor %}
+    </div>
+    {% if open_questions | length < review_items | length and apply_url %}
+    <div class="card-foot"><span class="muted">Answered questions are filled automatically on the next run.</span>
+      <div class="actions"><button class="btn sm" type="button" data-action="dry-run" data-id="{{ job.id }}">Dry run again</button><button class="btn sm primary" type="button" data-action="apply" data-id="{{ job.id }}">Apply</button></div></div>
+    {% endif %}
+  </div>
+</section>
+
+<section id="documents" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><div><div class="eyebrow">Application package</div><h2>Tailored documents</h2><p>Built from your master resume and verified evidence. Claims the truth guard couldn't verify are left out.</p></div>
+      <button class="btn sm" type="button" data-action="prepare-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-refresh"/></svg>Regenerate</button></div>
+    <div class="card-body flush">
+      <div class="list">
+      {% for a in artifacts %}
+        <div class="list-item">
+          <svg class="icon" style="width:20px;height:20px;color:var(--accent)"><use href="#i-file"/></svg>
+          <div class="grow"><strong>{{ a.title }}</strong><span class="sub">{{ a.artifact_type | replace('_', ' ') | capitalize }} · <time datetime="{{ a.created_at | iso }}" data-relative>{{ a.created_at | short_dt }}</time></span></div>
+          {% if a.truth_guard_passed %}<span class="badge good">verified</span>{% else %}<span class="badge warn" title="{{ (a.blocked_claims or []) | join(' | ') }}">{{ (a.blocked_claims or []) | length }} withheld</span>{% endif %}
+          <button class="btn sm ghost" type="button" data-action="view-artifact" data-id="{{ a.id }}">View</button>
+          {% if a.file_path %}<a class="btn sm" href="/api/artifacts/{{ a.id }}/download"><svg class="icon"><use href="#i-download"/></svg>PDF</a>{% endif %}
+        </div>
+      {% else %}
+        <div class="empty"><svg class="icon"><use href="#i-file"/></svg><strong>No documents yet</strong><span>Generate a tailored resume, cover letter, answers and outreach note.</span>
+          <button class="btn primary" type="button" data-action="prepare-job" data-id="{{ job.id }}">Prepare documents</button></div>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="evidence" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head"><div><div class="eyebrow">Career memory</div><h2>Your most relevant evidence for this role</h2><p>Ranked from your resume, projects and Build Journal.</p></div><a class="btn sm" href="/journal"><svg class="icon"><use href="#i-plus"/></svg>Add evidence</a></div>
+    <div class="card-body flush">
+      {% for e in evidence %}
+      <details class="disclosure">
+        <summary><div class="grow"><strong>{{ e.title }}</strong><div class="soft" style="font-size:12px">{{ e.category | replace('_', ' ') | capitalize }}{% if e.organization %} · {{ e.organization }}{% endif %}{% if e.date_range %} · {{ e.date_range }}{% endif %}</div></div></summary>
+        <div class="disclosure-body prose">
+          <p>{{ e.summary }}</p>
+          {% if e.bullets %}<ul style="margin-top:8px">{% for b in e.bullets[:6] %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+          {% if e.skills %}<div class="tag-list" style="margin-top:10px">{% for s in e.skills %}<span class="tag">{{ s }}</span>{% endfor %}</div>{% endif %}
+          {% if e.verified_metrics %}<div class="tag-list" style="margin-top:8px">{% for k, v in e.verified_metrics.items() %}<span class="tag good">{{ k }}: {{ v }}</span>{% endfor %}</div>{% endif %}
+        </div>
+      </details>
+      {% else %}
+        <div class="empty"><strong>No evidence yet</strong><span>Upload your resume or add a Build Journal entry.</span></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="activity" role="tabpanel" hidden>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-head"><div><div class="eyebrow">Application</div><h2>{{ ui.status_label.get(application.status, application.status) if application else 'Not started' }}</h2></div>
+        {% if application %}<button class="btn sm" type="button" data-action="check-proof" data-id="{{ application.id }}">Check proof</button>{% endif %}</div>
+      <div class="card-body">
+        {% if verification %}
+        <dl class="kv">
+          <dt>Verification</dt><dd><span class="badge {{ 'good' if verification.state == 'CONFIRMED' else 'warn' }}">{{ verification.state }}</span></dd>
+          {% if verification.confirmation_term %}<dt>Confirmation</dt><dd>“{{ verification.confirmation_term }}”</dd>{% endif %}
+          {% if verification.final_url %}<dt>Final page</dt><dd><a class="link" href="{{ verification.final_url }}" target="_blank" rel="noopener">{{ verification.final_url | truncate(48) }}</a></dd>{% endif %}
+          {% if verification.filled_fields %}<dt>Filled</dt><dd>{{ verification.filled_fields | length }} fields</dd>{% endif %}
+          {% if verification.screenshot_available %}<dt>Screenshot</dt><dd><a class="link" href="/api/applications/{{ application.id }}/evidence/screenshot" target="_blank">Open</a></dd>{% endif %}
+        </dl>
+        {% else %}<p class="muted">Nothing has been submitted for this job yet.</p>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div><div class="eyebrow">Agents</div><h2>Run log</h2></div></div>
+      <div class="card-body">
+        <div class="timeline">
+          {% for r in runs %}
+            <div class="item {{ 'good' if r.status == 'success' else 'bad' if r.status in ('error', 'failed') else '' }}"><strong>{{ r.agent_name }}</strong>
+              <span>{{ r.output_summary or r.status }} · {{ r.latency_ms }} ms · <time datetime="{{ r.created_at | iso }}" data-relative>{{ r.created_at | short_dt }}</time></span></div>
+          {% else %}<p class="muted">No agent runs yet.</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="description" role="tabpanel" hidden>
+  <div class="card"><div class="card-body prose">
+    {% if job.responsibilities %}<h3>Responsibilities</h3><ul>{% for r in job.responsibilities %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+    <h3>Full description</h3>
+    <div class="pre" style="max-height:none;font-family:var(--font-sans);font-size:13.5px">{{ job.description }}</div>
+  </div></div>
+</section>
+
+<dialog class="modal wide" id="resultDialog">
+  <div class="modal-head"><div><h2 data-result-title>Result</h2></div><button class="btn ghost icon-only" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button></div>
+  <div class="modal-body" data-result-body></div>
+  <div class="modal-foot"><button class="btn primary" type="button" data-close>Done</button></div>
+</dialog>
+<dialog class="modal wide" id="artifactDialog">
+  <div class="modal-head"><div><h2 data-artifact-title>Document</h2><p data-artifact-sub></p></div><button class="btn ghost icon-only" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button></div>
+  <div class="modal-body"><div class="pre" data-artifact-body></div><div data-artifact-blocked></div></div>
+</dialog>
 {% endblock %}

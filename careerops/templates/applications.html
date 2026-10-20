@@ -1,36 +1,66 @@
-{% extends 'base.html' %}{% block title %}Applications · CareerOps{% endblock %}{% block content %}
-<header class='top'><div><div class='eyebrow'>APPLICATION TRACKER</div><h1>Applications</h1><p>CareerOps separates <strong>submitted</strong> from <strong>confirmed submitted</strong>. A submission is only confirmed when the browser agent captures employer confirmation evidence.</p></div></header>
-<section class='metrics'>
-<div class='metric'><span>Applications tracked</span><strong>{{ metrics.total }}</strong><small>prepared + submitted + outcomes</small></div>
-<div class='metric'><span>Confirmed submitted</span><strong>{{ metrics.confirmed }}</strong><small>browser confirmation evidence captured</small></div>
-<div class='metric'><span>Needs review</span><strong>{{ metrics.review }}</strong><small>MFA, sensitive field, or no confirmation</small></div>
-<div class='metric accent'><span>Interviews</span><strong>{{ metrics.interviews }}</strong><small>outcome tracking</small></div>
+{% extends 'base.html' %}
+{% block title %}Applications{% endblock %}
+{% block content %}
+{% set counts = {} %}
+{% for r in rows %}{% set _ = counts.update({r.application.status: counts.get(r.application.status, 0) + 1}) %}{% endfor %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Tracker</div>
+    <h1>Applications</h1>
+    <p>Everything CareerOps prepared or submitted. “Confirmed” means the employer's confirmation was captured after submitting; a click alone never counts.</p>
+  </div>
+  <a class="btn" href="/jobs?decision=APPLY"><svg class="icon"><use href="#i-briefcase"/></svg>Find jobs to apply to</a>
+</header>
+
+<section class="stats">
+  <div class="stat"><span>Tracked</span><strong>{{ metrics.total }}</strong><small>prepared, submitted and outcomes</small></div>
+  <div class="stat accent"><span>Confirmed submitted</span><strong>{{ metrics.confirmed }}</strong><small>employer confirmation captured</small></div>
+  <div class="stat warn"><span>Needs your answers</span><strong>{{ metrics.review }}</strong><small>paused on questions or sign-in</small></div>
+  <div class="stat"><span>Interviews &amp; offers</span><strong>{{ metrics.interviews }}</strong><small>update outcomes below</small></div>
 </section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>APPLICATION HISTORY</span><h2>What CareerOps actually did</h2></div></div>
-<table><thead><tr><th>Company / Role</th><th>Portal</th><th>Status</th><th>Submission verification</th><th>Submitted</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>
-{% for row in rows %}
-<tr>
-<td><strong>{{row.job.company}}</strong><span>{{row.job.title}}</span></td>
-<td>{{row.application.portal or row.job.ats or '—'}}</td>
-<td><span class='pill {{ 'apply' if row.application.status in ['submitted','interview','offer'] else ('review' if row.application.status=='review' else 'skip') }}'>{{row.application.status|upper}}</span></td>
-<td>
-{% if row.verification.state == 'CONFIRMED' %}<span class='status pass'>CONFIRMED</span><small class='block-note'>Employer confirmation detected</small>
-{% elif row.verification.state == 'UNVERIFIED' %}<span class='status review'>UNVERIFIED</span><small class='block-note'>Marked submitted, but no browser proof</small>
-{% elif row.verification.state == 'REVIEW' %}<span class='status review'>REVIEW</span><small class='block-note'>{{ (row.application.human_review_reasons or ['Needs review'])|join(', ') }}</small>
-{% else %}<span class='status'>NOT SUBMITTED</span>{% endif %}
-</td>
-<td>{% if row.application.submitted_at %}{{row.application.submitted_at.strftime('%Y-%m-%d %H:%M')}} UTC{% else %}—{% endif %}</td>
-<td>
-{% if row.verification.confirmation_term %}<strong class='proof-text'>“{{row.verification.confirmation_term}}”</strong>{% endif %}
-{% if row.verification.screenshot_available %}<a class='mini' target='_blank' href='/api/applications/{{row.application.id}}/evidence/screenshot'>View proof</a>{% endif %}
-{% if row.verification.final_url %}<a class='mini' target='_blank' href='{{row.verification.final_url}}'>Final page</a>{% endif %}
-</td>
-<td><a class='mini' href='/jobs/{{row.job.id}}'>Open job</a>{% if row.job.application_url %}<a class='mini' target='_blank' href='{{row.job.application_url}}'>Employer</a>{% endif %}<button class='mini' onclick='verifyApplication({{row.application.id}})'>Check proof</button><select class='status-select' onchange='updateApplicationStatus({{row.application.id}}, this.value)'><option value=''>Update outcome…</option><option value='interview'>Interview</option><option value='offer'>Offer</option><option value='rejected'>Rejected</option><option value='withdrawn'>Withdrawn</option></select></td>
-</tr>
-{% else %}<tr><td colspan='7'><strong>No applications yet.</strong><span>When CareerOps prepares or submits a job, it will appear here with its verification state.</span></td></tr>{% endfor %}
-</tbody></table></section>
-<section class='grid2 application-explainer'>
-<div class='panel'><span class='eyebrow'>WHAT “CONFIRMED” MEANS</span><h2>Submission evidence</h2><p>CareerOps only displays <strong>CONFIRMED</strong> when the browser sees an employer-side confirmation phrase after clicking submit. It stores the final URL, detected confirmation text, timestamp, and a screenshot when available.</p></div>
-<div class='panel'><span class='eyebrow'>NO FALSE POSITIVES</span><h2>A click is not proof</h2><p>If CareerOps clicks Submit but cannot detect a confirmation, the application is routed to <strong>REVIEW</strong>. A manually changed “submitted” status remains <strong>UNVERIFIED</strong> unless evidence exists.</p></div>
+
+<section class="card">
+  <div class="toolbar">
+    <div class="filter-chips" data-filter-group="appRows" role="group" aria-label="Filter by status">
+      <button type="button" data-filter="all" aria-pressed="true">All<span class="n">{{ rows | length }}</span></button>
+      {% for v, label, tone in ui.application_statuses %}{% if counts.get(v) %}
+        <button type="button" data-filter="{{ v }}" id="filter-{{ v }}" aria-pressed="false">{{ label }}<span class="n">{{ counts[v] }}</span></button>
+      {% endif %}{% endfor %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Role</th><th class="hide-sm">Portal</th><th>Status</th><th>Verification</th><th class="hide-sm">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody id="appRows">
+        {% for row in rows %}
+        {% set a = row.application %}{% set v = row.verification %}
+        <tr data-href="/jobs/{{ row.job.id }}" data-status="{{ a.status }}">
+          <td class="primary-cell"><strong>{{ row.job.title }}</strong><span>{{ row.job.company }}</span></td>
+          <td class="hide-sm muted">{{ a.portal or row.job.ats or '—' }}</td>
+          <td>
+            <label class="sr-only" for="st-{{ a.id }}">Status for {{ row.job.title }}</label>
+            <select class="select sm" id="st-{{ a.id }}" data-change="app-status" data-id="{{ a.id }}">
+              {% for value, label, tone in ui.application_statuses %}<option value="{{ value }}" {{ 'selected' if a.status == value }}>{{ label }}</option>{% endfor %}
+            </select>
+          </td>
+          <td>
+            {% if v.state == 'CONFIRMED' %}<span class="badge good" title="{{ v.confirmation_term or '' }}">Confirmed</span>
+            {% elif v.state == 'UNVERIFIED' %}<span class="badge warn" title="Marked submitted without browser proof">Unverified</span>
+            {% elif v.state == 'REVIEW' %}<a class="badge warn" href="/jobs/{{ row.job.id }}#review" title="{{ (a.human_review_reasons or []) | join(', ') }}">{{ (a.human_review_reasons or []) | length }} to answer</a>
+            {% else %}<span class="badge neutral">Not submitted</span>{% endif %}
+          </td>
+          <td class="hide-sm soft"><time datetime="{{ a.updated_at | iso }}" data-relative>{{ a.updated_at | short_dt }}</time></td>
+          <td class="actions-cell">
+            {% if v.screenshot_available %}<a class="btn sm ghost" href="/api/applications/{{ a.id }}/evidence/screenshot" target="_blank" title="Screenshot"><svg class="icon"><use href="#i-eye"/></svg></a>{% endif %}
+            {% if row.job.application_url %}<a class="btn sm ghost" href="{{ row.job.application_url }}" target="_blank" rel="noopener" title="Employer page"><svg class="icon"><use href="#i-external"/></svg></a>{% endif %}
+            <a class="btn sm" href="/jobs/{{ row.job.id }}">Open</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6"><div class="empty"><svg class="icon"><use href="#i-send"/></svg><strong>No applications yet</strong><span>Open a job and choose Dry run or Apply.</span><a class="btn primary" href="/jobs?decision=APPLY">Browse apply-ready jobs</a></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

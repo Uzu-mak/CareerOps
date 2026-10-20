@@ -1,26 +1,129 @@
-{% extends 'base.html' %}{% block title %}CareerOps Dashboard{% endblock %}{% block content %}
-<header class='top'><div><div class='eyebrow'>DISCOVER → EVALUATE → APPLY → REPORT</div><h1>Good afternoon, {{ profile.preferred_name or 'Builder' }}.</h1><p>Watchtower scans enabled job sources, filters by your profile, scores fit, and can prepare or attempt safe applications.</p></div><div class='actions'><button class='btn secondary' onclick='scanNow()'>Scan jobs now</button><button class='btn secondary' onclick='analyzeAll()'>Re-run analysis</button></div></header>
-<section class='metrics'>
-<div class='metric'><span>Jobs tracked</span><strong>{{ metrics.jobs }}</strong><small>live + manual, deduplicated</small></div>
-<div class='metric'><span>High-fit</span><strong>{{ metrics.high_fit }}</strong><small>A / A+ opportunities</small></div>
-<div class='metric'><span>Applications</span><strong>{{ metrics.applications }}</strong><small>{{ metrics.submitted }} submitted</small></div>
-<div class='metric accent'><span>Enabled sources</span><strong>{{ sources|selectattr('enabled')|list|length }}</strong><small>Watchtower checks every 15 min</small></div>
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+{% set done = checklist | selectattr('done') | list | length %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Discover · Evaluate · Apply · Verify</div>
+    <h1><span data-greeting>Hello</span>, {{ profile.preferred_name or (profile.full_name.split()[0] if profile and profile.full_name else 'there') }}.</h1>
+    <p>
+      {% if last_scan %}Last scan <time datetime="{{ last_scan | iso }}" data-relative>{{ last_scan | short_dt }}</time> across {{ sources | selectattr('enabled') | list | length }} sources.{% else %}No scan has run yet.{% endif %}
+      {% if source_errors %}<a class="link" href="/sources">{{ source_errors }} source{{ 's' if source_errors != 1 }} reported errors.</a>{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    {% if pending %}
+      <button class="btn" type="button" data-action="analyze-pending" data-total="{{ pending }}"><svg class="icon"><use href="#i-spark"/></svg>Analyze {{ pending }} new</button>
+    {% endif %}
+    <button class="btn primary" type="button" data-action="scan"><svg class="icon"><use href="#i-refresh"/></svg>Scan jobs now</button>
+  </div>
+</header>
+
+{% if checklist and done < checklist | length %}
+<section class="card warn" style="margin-bottom:18px">
+  <div class="card-head">
+    <div>
+      <div class="eyebrow">Setup · {{ done }} of {{ checklist | length }}</div>
+      <h2>Finish setting up so CareerOps can apply for you</h2>
+    </div>
+    <div style="width:160px" class="hide-sm"><div class="progress"><i style="width:{{ (done / checklist | length * 100) | round }}%"></i></div></div>
+  </div>
+  <div class="card-body">
+    <div class="checklist grid-3 grid" style="gap:2px 16px">
+      {% for item in checklist %}
+        <a href="{{ item.href }}" class="{{ 'done' if item.done }}"><span class="tick">{% if item.done %}<svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>{% endif %}</span><span>{{ item.label }}</span></a>
+      {% endfor %}
+    </div>
+  </div>
 </section>
-<section class='grid2'>
-<div class='panel'><div class='panel-head'><div><span class='eyebrow'>WATCHTOWER</span><h2>Live discovery sources</h2></div><button class='btn ghost' onclick='document.getElementById("sourceDialog").showModal()'>+ Add source</button></div>
-{% for s in sources %}<div class='constraint'><div><strong>{{s.name}}</strong><span>{{s.source_type|replace('_',' ')|title}} · {% if s.last_run_at %}last scan {{s.last_run_at}} · {{s.last_count}} fetched{% else %}{{s.last_status or 'never scanned'}}{% endif %}</span></div><div class='source-actions'><span class='status {{"pass" if s.enabled else "review"}}'>{% if s.enabled %}ON{% elif s.last_status and 'setup needed' in s.last_status %}SETUP{% else %}OFF{% endif %}</span><button class='mini' onclick='toggleSource({{s.id}}, {{"false" if s.enabled else "true"}})'>{{"Disable" if s.enabled else "Enable"}}</button><button class='mini danger-text' onclick='deleteSource({{s.id}})'>Remove</button></div></div>{% else %}<p class='muted'>No sources configured. Add a Greenhouse, Lever, Ashby, or public career page source.</p>{% endfor %}
-<div class='review-box'><strong>Automatic scanning</strong><span>The Watchtower wakes every 15 minutes and scans each source when its configured interval is due. “Scan jobs now” forces an immediate scan across enabled sources and the alert inbox.</span></div></div>
-<div class='panel'><span class='eyebrow'>AUTOPILOT</span><h2>Application automation</h2><p>CareerOps only attempts background submission for jobs that pass hard constraints, are marked APPLY, meet your fit threshold, and have a master resume + verified legal answers. CAPTCHA/MFA/sensitive fields always pause.</p>
-<form id='autopilotForm'><label><input id='autoApplyEnabled' type='checkbox' {% if runtime.auto_apply_enabled %}checked{% endif %}> Enable background auto-apply</label><label>Minimum fit score<input id='autoApplyMinFit' type='number' min='0' max='100' value='{{runtime.auto_apply_min_fit}}'></label><label>Maximum submitted applications per day<input id='maxAutoApps' type='number' min='1' max='100' value='{{runtime.max_auto_applications_per_day}}'></label><button class='btn' type='button' onclick='saveAutopilot()'>Save automation settings</button></form>
-<div class='review-box'><strong>Status: {{'ON' if runtime.auto_apply_enabled else 'OFF'}}</strong><span>Even when ON, unsupported/login-protected portals can pause for your review instead of submitting.</span></div></div>
+{% endif %}
+
+<section class="stats">
+  <a class="stat" href="/jobs"><span>Jobs tracked</span><strong>{{ '{:,}'.format(metrics.jobs) }}</strong><small>{{ pending }} awaiting analysis</small></a>
+  <a class="stat accent" href="/jobs?decision=APPLY"><span>Recommended to apply</span><strong>{{ decisions.get('APPLY', 0) }}</strong><small>{{ metrics.high_fit }} rated A or A+</small></a>
+  <a class="stat warn" href="/applications"><span>Waiting on you</span><strong>{{ shell.review }}</strong><small>applications paused for answers</small></a>
+  <a class="stat" href="/applications"><span>Submitted</span><strong>{{ metrics.submitted }}</strong><small>{{ pipeline.get('interview', 0) }} interview{{ 's' if pipeline.get('interview', 0) != 1 }}</small></a>
 </section>
-<section class='grid2'><div class='panel'><div class='panel-head'><div><span class='eyebrow'>OPPORTUNITY QUEUE</span><h2>Recommended jobs</h2></div><button class='btn ghost' onclick='document.getElementById("addJob").showModal()'>+ Add job</button></div>
-<table><thead><tr><th>Company / Role</th><th>Location</th><th>Fit</th><th>Decision</th><th>Action</th></tr></thead><tbody>
-{% for row in rows %}<tr><td onclick='location.href="/jobs/{{ row.job.id }}"'><strong>{{ row.job.company }}</strong><span>{{ row.job.title }}</span></td><td>{{ row.job.location or '—' }}</td><td>{% if row.analysis %}<div class='score {{ row.analysis.priority|replace("+", "plus") }}'>{{ row.analysis.fit_score|round|int }}%</div><small>{{ row.analysis.priority }}</small>{% else %}<span class='muted'>Not analyzed</span>{% endif %}</td><td>{% if row.analysis %}<span class='pill {{ row.analysis.recommended_action|lower }}'>{{ row.analysis.recommended_action }}</span>{% else %}<button class='mini' onclick='analyzeJob({{row.job.id}})'>Analyze</button>{% endif %}</td><td><button class='mini' onclick='location.href="/jobs/{{row.job.id}}"'>Open</button>{% if row.analysis and row.analysis.recommended_action == 'APPLY' %}<button class='mini' onclick='applyCareerOps({{row.job.id}})'>Apply</button>{% endif %}</td></tr>{% else %}<tr><td colspan='5'><strong>No live jobs yet.</strong><span>Click “Scan jobs now.” If this remains empty, check source status above and your location allow-list.</span></td></tr>{% endfor %}
-</tbody></table></div>
-<div class='panel'><div class='panel-head'><div><span class='eyebrow'>DAILY REPORT</span><h2>Decision intelligence</h2></div></div><div class='report-stats'><div><strong>{{ report.summary.jobs_analyzed }}</strong><span>analyzed</span></div><div><strong>{{ report.summary.high_fit }}</strong><span>high-fit</span></div><div><strong>{{ report.summary.skipped }}</strong><span>skipped</span></div></div><h3>Top opportunities</h3>{% for x in report.top_opportunities[:4] %}<a class='opportunity' href='/jobs/{{x.job_id}}'><div><strong>{{x.company}}</strong><span>{{x.title}}</span></div><div class='score small'>{{x.fit_score|round|int}}%</div></a>{% else %}<p class='muted'>Watchtower will populate this after live jobs are discovered and analyzed.</p>{% endfor %}</div></section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>ALERTS</span><h2>Never miss a new match</h2></div><button class='btn ghost' onclick='location.href="/notifications"'>Notification center</button></div><p>Configure email, Slack, Discord or Telegram alerts for new matches, A/A+ opportunities, human review, confirmed submissions and failures. LinkedIn/Indeed job-alert emails can also feed Watchtower automatically.</p></section>
-<section class='panel architecture'><div class='panel-head'><div><span class='eyebrow'>AGENT SYSTEM</span><h2>What is running behind the dashboard</h2></div></div><div class='agent-flow'><span>Discovery</span><b>→</b><span>Location Policy</span><b>→</b><span>JD Analysis</span><b>→</b><span>Fit</span><b>→</b><span>Evidence</span><b>→</b><span>Resume</span><b>→</b><span>Cover Letter</span><b>→</b><span>Browser</span><b>→</b><span>Tracking</span></div></section>
-<dialog id='addJob'><form method='dialog' class='modal'><div class='panel-head'><div><span class='eyebrow'>MANUAL INGEST</span><h2>Add a job</h2></div><button class='x'>×</button></div><label>Company<input id='company'></label><label>Role<input id='title'></label><label>Location<input id='location' placeholder='Seattle, WA'></label><label>Job description<textarea id='description' rows='8'></textarea></label><div class='actions'><button class='btn' type='button' onclick='addJob()'>Save & analyze</button></div></form></dialog>
-<dialog id='sourceDialog'><form method='dialog' class='modal'><div class='panel-head'><div><span class='eyebrow'>LIVE SOURCE</span><h2>Add ATS/company source</h2></div><button class='x'>×</button></div><label>Type<select id='sourceType'><option value='greenhouse'>Greenhouse</option><option value='lever'>Lever</option><option value='ashby'>Ashby</option><option value='generic'>Single public job/career URL</option><option value='company_career'>Company career site crawler</option><option value='adzuna'>Adzuna broad market</option><option value='usajobs'>USAJOBS</option><option value='linkedin_alerts'>LinkedIn alert inbox</option><option value='indeed_alerts'>Indeed alert inbox</option></select></label><label>Company/source name<input id='sourceName' placeholder='Company name'></label><label>Board token / site name / URL / JSON config<input id='sourceToken' placeholder='e.g. openai, https://careers..., or {"country":"us"}'></label><p class='muted'>Adzuna/USAJOBS require API credentials in .env. LinkedIn/Indeed use the alert inbox rather than logged-in scraping.</p><div class='actions'><button class='btn' type='button' onclick='addSource()'>Save source</button></div></form></dialog>
+
+<section class="card" style="margin-bottom:18px">
+  <div class="pipeline">
+    {% for key, label in [('prepared', 'Prepared'), ('review', 'Needs review'), ('submitted', 'Submitted'), ('interview', 'Interviewing'), ('offer', 'Offers')] %}
+      <a href="/applications#{{ key }}"><span>{{ label }}</span><strong>{{ pipeline.get(key, 0) }}</strong></a>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid grid-main">
+  <section class="card">
+    <div class="card-head">
+      <div><div class="eyebrow">Best matches</div><h2>Top opportunities</h2><p>Highest fit across every analyzed job.</p></div>
+      <a class="btn sm" href="/jobs">All jobs<svg class="icon"><use href="#i-arrow-right"/></svg></a>
+    </div>
+    <div class="card-body flush">
+      {% if report.top_opportunities %}
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Role</th><th class="hide-sm">Location</th><th>Fit</th><th>Decision</th></tr></thead>
+        <tbody>
+          {% for x in report.top_opportunities[:8] %}
+          {% set f = x.fit_score | round | int %}
+          <tr data-href="/jobs/{{ x.job_id }}">
+            <td class="primary-cell"><strong>{{ x.title }}</strong><span>{{ x.company }}</span></td>
+            <td class="hide-sm muted">{{ (x.location or '—') | truncate(42) }}</td>
+            <td><span class="fit {{ 'high' if f >= 80 else 'mid' if f >= 60 else 'low' }}"><span class="fit-bar"><i style="width:{{ f }}%"></i></span>{{ f }}%</span></td>
+            <td class="nowrap"><span class="badge {{ x.action | lower }}">{{ x.action }}</span> <span class="soft mono">{{ x.priority }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}
+        <div class="empty"><svg class="icon"><use href="#i-briefcase"/></svg><strong>No analyzed jobs yet</strong><span>Run a scan, then analyze the jobs it finds.</span>
+          <button class="btn primary" type="button" data-action="scan"><svg class="icon"><use href="#i-refresh"/></svg>Scan jobs now</button></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><div><div class="eyebrow">Needs you</div><h2>Paused applications</h2></div></div>
+      <div class="card-body flush">
+        <div class="list">
+          {% for app, job in review_apps %}
+            <a class="list-item" href="/jobs/{{ job.id }}#review">
+              <div class="grow"><strong>{{ job.title }}</strong><span class="sub">{{ job.company }} · {{ (app.human_review_reasons or []) | length }} question{{ 's' if (app.human_review_reasons or []) | length != 1 }}</span></div>
+              <span class="badge warn">Answer</span>
+            </a>
+          {% else %}
+            <div class="empty" style="padding:26px 20px"><svg class="icon"><use href="#i-check"/></svg><span>Nothing is waiting on you.</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><div class="eyebrow">Autopilot</div><h2>Background applying is {{ 'on' if runtime.auto_apply_enabled else 'off' }}</h2>
+          <p>{% if runtime.auto_apply_enabled %}Applies to APPLY-rated jobs at {{ runtime.auto_apply_min_fit }}%+ fit, up to {{ runtime.max_auto_applications_per_day }} a day.{% else %}Jobs are found and scored; you choose what to apply to.{% endif %}</p></div>
+        <span class="dot {{ '' if runtime.auto_apply_enabled else 'off' }}" style="margin-top:6px"></span>
+      </div>
+      <div class="card-body"><a class="btn sm" href="/sources#automation">Change settings</a></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><div class="eyebrow">Activity</div><h2>Recent events</h2></div><a class="btn sm ghost" href="/notifications">View all</a></div>
+      <div class="card-body flush">
+        <div class="list">
+          {% for e in events %}
+            <a class="list-item" href="{{ '/jobs/' ~ e.job_id if e.job_id else '/notifications' }}">
+              <span class="dot {{ 'warn' if e.event_type in ('human_review',) else 'bad' if e.event_type in ('failed',) else '' }}"></span>
+              <div class="grow"><strong>{{ e.title }}</strong><span class="sub">{{ e.message }}</span></div>
+              <time class="meta" datetime="{{ e.created_at | iso }}" data-relative>{{ e.created_at | short_dt }}</time>
+            </a>
+          {% else %}
+            <div class="empty" style="padding:26px 20px"><span>No events yet.</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
 {% endblock %}

@@ -1,8 +1,158 @@
-{% extends 'base.html' %}{% block title %}Candidate Profile — CareerOps{% endblock %}{% block content %}
-<header class='top'><div><div class='eyebrow'>CANONICAL CANDIDATE PROFILE</div><h1>Your source of truth</h1><p>CareerOps uses this profile, your master resume, your links and your Build Journal as evidence for search, application forms and tailored documents.</p></div></header>
-<section class='panel'><span class='eyebrow'>MASTER RESUME</span><h2>Baseline for every application</h2><p>Upload the resume you want CareerOps to treat as your baseline. CareerOps can reorder emphasis and select verified evidence, but it must not invent claims.</p><div class='review-box'><strong>{% if profile.baseline_resume_filename %}{{profile.baseline_resume_filename}}{% else %}No master resume uploaded{% endif %}</strong><span>{% if profile.baseline_resume_uploaded_at %}Uploaded {{profile.baseline_resume_uploaded_at}}{% else %}Upload a PDF, DOCX or TXT resume before using Apply with CareerOps.{% endif %}</span></div><form id='resumeUploadForm' enctype='multipart/form-data'><label>Master resume<input id='masterResume' name='resume' type='file' accept='.pdf,.docx,.txt'></label><div class='actions'><button class='btn' type='button' onclick='uploadMasterResume()'>Upload master resume</button>{% if profile.baseline_resume_filename %}<a class='btn secondary' href='/api/profile/resume/download'>Download current</a>{% endif %}</div></form></section>
-<section class='grid2'><form class='panel' id='profileForm'><h2>Identity & search preferences</h2><label>Full name<input name='full_name' value='{{profile.full_name}}'></label><label>Preferred name<input name='preferred_name' value='{{profile.preferred_name or ""}}'></label><label>Email<input name='email' value='{{profile.email or ""}}'></label><label>Phone<input name='phone' value='{{profile.phone or ""}}'></label><label>LinkedIn URL<input name='linkedin_url' type='url' placeholder='https://www.linkedin.com/in/...' value='{{profile.linkedin_url or ""}}'></label><label>GitHub URL<input name='github_url' type='url' placeholder='https://github.com/...' value='{{profile.github_url or ""}}'></label><label>Home location<input name='home_location' placeholder='Auburn, WA' value='{{profile.home_location or ""}}'></label><label>Preferred job locations <small>(one per line)</small><textarea name='preferred_locations' rows='5' placeholder='Seattle, WA&#10;Bellevue, WA&#10;Redmond, WA'>{{profile.preferred_locations|join('\n')}}</textarea></label><label>Search radius (miles)<input name='search_radius_miles' type='number' min='0' max='500' value='{{profile.search_radius_miles or 50}}'></label><div class='review-box'><strong>Work arrangements</strong><label><input name='remote_allowed' type='checkbox' {% if profile.remote_allowed %}checked{% endif %}> Remote</label><label><input name='hybrid_allowed' type='checkbox' {% if profile.hybrid_allowed %}checked{% endif %}> Hybrid</label><label><input name='onsite_allowed' type='checkbox' {% if profile.onsite_allowed %}checked{% endif %}> Onsite</label><span>Preferred locations are the local allow-list used by Watchtower.</span></div><label>Minimum salary<input name='minimum_salary' type='number' value='{{profile.minimum_salary or ""}}'></label><label>Target salary<input name='target_salary' type='number' value='{{profile.target_salary or ""}}'></label><label>Role families<textarea name='role_families' rows='4'>{{profile.role_families|join('\n')}}</textarea></label><label>Skills<textarea name='skills' rows='7'>{{profile.skills|join('\n')}}</textarea></label><label>Voluntary EEO questions <small>(gender, race, veteran, disability)</small><select name='eeo_preference'><option value='' {% if not profile.eeo_preference %}selected{% endif %}>Leave blank when optional; ask me when required</option><option value='decline' {% if profile.eeo_preference=='decline' %}selected{% endif %}>Answer &quot;decline to self-identify&quot;</option></select></label><button class='btn' type='button' onclick='saveProfile()'>Save profile</button></form>
-<div class='panel sensitive'><span class='eyebrow'>SENSITIVE / LEGAL</span><h2>Human-verified only</h2><p>These values are intentionally controlled by you. CareerOps can reuse them only after you verify them.</p><label>Currently authorized to work in U.S.<select id='authorized'><option value=''>Unverified</option><option value='true' {% if profile.authorized_to_work_us==true %}selected{% endif %}>Yes</option><option value='false' {% if profile.authorized_to_work_us==false %}selected{% endif %}>No</option></select></label><label>Need sponsorship now<select id='sponsorNow'><option value=''>Unverified</option><option value='true' {% if profile.requires_current_sponsorship==true %}selected{% endif %}>Yes</option><option value='false' {% if profile.requires_current_sponsorship==false %}selected{% endif %}>No</option></select></label><label>Need sponsorship in future<select id='sponsorFuture'><option value=''>Unverified</option><option value='true' {% if profile.requires_future_sponsorship==true %}selected{% endif %}>Yes</option><option value='false' {% if profile.requires_future_sponsorship==false %}selected{% endif %}>No</option></select></label><label>Authorization type<input id='authType' value='{{profile.work_authorization_type or ""}}'></label><label>Authorization expiration <small>(optional)</small><input id='authExpiration' value='{{profile.work_authorization_expiration or ""}}' placeholder='YYYY-MM-DD or note'></label><button class='btn danger' type='button' onclick='saveProfile(true)'>Verify & save legal answers</button><div class='review-box'><strong>Status</strong><span>{% if profile.legal_answers_verified_at %}Verified {{profile.legal_answers_verified_at}}{% else %}Not verified — application agent will pause on legal questions.{% endif %}</span></div></div></section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>PUBLIC / APPLICATION LINKS</span><h2>Links CareerOps can use</h2></div><a class='btn secondary' href='/journal'>Open Build Journal</a></div><p class='muted'>Add your portfolio, personal site, live demos, GitHub repositories, project pages, publications, or any other URL that may strengthen an application. These are clickable and can be selected for application forms.</p><div class='link-grid'>{% if profile.linkedin_url %}<a class='link-card' href='{{profile.linkedin_url}}' target='_blank' rel='noopener'><strong>LinkedIn</strong><span>{{profile.linkedin_url}}</span></a>{% endif %}{% if profile.github_url %}<a class='link-card' href='{{profile.github_url}}' target='_blank' rel='noopener'><strong>GitHub</strong><span>{{profile.github_url}}</span></a>{% endif %}{% for link in links %}<div class='link-card link-manage'><a href='{{link.url}}' target='_blank' rel='noopener'><strong>{{link.label}}</strong><span>{{link.link_type|title}} · {{link.url}}</span></a><button class='mini danger-text' onclick='deleteProfileLink({{link.id}})'>Remove</button></div>{% endfor %}</div><form id='linkForm' class='inline-form'><label>Label<input id='linkLabel' placeholder='Portfolio / CareerOps live demo / GitHub repo'></label><label>Type<select id='linkType'><option value='portfolio'>Portfolio</option><option value='project'>Project</option><option value='website'>Website</option><option value='publication'>Publication</option><option value='other'>Other</option></select></label><label class='grow'>URL<input id='linkUrl' type='url' placeholder='https://...'></label><button class='btn' type='button' onclick='addProfileLink()'>Add link</button></form></section>
-<section class='panel'><span class='eyebrow'>LIVING CAREER EVIDENCE</span><h2>Your resume is not the only source anymore</h2><p>Anything you record in the <a href='/journal'>Build Journal</a> becomes structured candidate evidence. CareerOps can use recent builds, measured impact, architecture choices, tradeoffs, skills, time spent and lessons when matching jobs and tailoring applications.</p></section>
+{% extends 'base.html' %}
+{% block title %}Profile{% endblock %}
+{% macro tags(id, name, source, values, placeholder) -%}
+  <div class="tag-input" id="{{ id }}" data-source="{{ source }}">
+    <input type="hidden" name="{{ name }}" value="{{ (values or []) | tojson | forceescape }}">
+    <input type="text" placeholder="{{ placeholder }}" aria-label="{{ placeholder }}" autocomplete="off">
+  </div>
+{%- endmacro %}
+{% macro tri(name, label, value) -%}
+  <div class="field"><label for="f-{{ name }}">{{ label }} <span class="req">*</span></label>
+    <select class="select" id="f-{{ name }}" name="{{ name }}">
+      <option value="" {{ 'selected' if value is none }}>Not answered</option>
+      <option value="true" {{ 'selected' if value == true }}>Yes</option>
+      <option value="false" {{ 'selected' if value == false }}>No</option>
+    </select></div>
+{%- endmacro %}
+{% block content %}
+{% set done = checklist | selectattr('done') | list | length %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Source of truth</div>
+    <h1>Profile</h1>
+    <p>Everything CareerOps uses to search, score and fill applications. It never invents facts: anything not here is asked, not guessed.</p>
+  </div>
+</header>
+
+<div class="grid grid-side">
+  <aside class="stack sticky">
+    <div class="card">
+      <div class="card-head"><div><div class="eyebrow">Completeness</div><h2>{{ done }} of {{ checklist | length }} done</h2></div></div>
+      <div class="card-body">
+        <div class="progress" style="margin-bottom:12px"><i style="width:{{ (done / (checklist | length or 1) * 100) | round }}%"></i></div>
+        <div class="checklist">
+          {% for item in checklist %}<a href="{{ item.href }}" class="{{ 'done' if item.done }}"><span class="tick">{% if item.done %}<svg class="icon" style="width:11px;height:11px"><use href="#i-check"/></svg>{% endif %}</span><span>{{ item.label }}</span></a>{% endfor %}
+        </div>
+      </div>
+    </div>
+    <nav class="card hide-sm" aria-label="Profile sections">
+      <div class="card-body nav" style="padding:10px">
+        <a href="#resume"><svg class="icon"><use href="#i-file"/></svg>Master resume</a>
+        <a href="#identity"><svg class="icon"><use href="#i-user"/></svg>Identity &amp; contact</a>
+        <a href="#search"><svg class="icon"><use href="#i-search"/></svg>Search preferences</a>
+        <a href="#legal"><svg class="icon"><use href="#i-shield"/></svg>Work authorization</a>
+        <a href="#links"><svg class="icon"><use href="#i-link"/></svg>Links</a>
+      </div>
+    </nav>
+  </aside>
+
+  <div class="stack">
+    <!-- Resume -->
+    <section class="card" id="resume">
+      <div class="card-head"><div><div class="eyebrow">Master resume</div><h2>The baseline for every tailored resume</h2>
+        <p>CareerOps reorders and selects from it per job; it never adds claims it can't verify. Skills found in it are added to your profile automatically.</p></div></div>
+      <div class="card-body stack" style="gap:12px">
+        {% if profile.baseline_resume_filename %}
+          <div class="file-row"><svg class="icon"><use href="#i-file"/></svg>
+            <div class="grow" style="flex:1"><strong>{{ profile.baseline_resume_filename }}</strong><span>Uploaded <time datetime="{{ profile.baseline_resume_uploaded_at | iso }}" data-relative>{{ profile.baseline_resume_uploaded_at | short_dt }}</time> · {{ '{:,}'.format((profile.baseline_resume_text or '') | length) }} characters read</span></div>
+            <a class="btn sm" href="/api/profile/resume/download"><svg class="icon"><use href="#i-download"/></svg>Download</a></div>
+        {% endif %}
+        <label class="dropzone" tabindex="0">
+          <svg class="icon"><use href="#i-upload"/></svg>
+          <div><strong>{{ 'Replace resume' if profile.baseline_resume_filename else 'Upload your resume' }}</strong><span>Drop a PDF, DOCX or TXT here, or click to choose · up to 8 MB</span></div>
+          <input type="file" accept=".pdf,.docx,.txt" data-change="resume-file">
+        </label>
+      </div>
+    </section>
+
+    <!-- Identity -->
+    <form class="card" id="identity" data-form="profile-identity">
+      <div class="card-head"><div><div class="eyebrow">Identity &amp; contact</div><h2>What goes into the name and contact fields</h2></div></div>
+      <div class="card-body form-grid">
+        <div class="field"><label for="f-full_name">Full legal name <span class="req">*</span></label><input class="input" id="f-full_name" name="full_name" value="{{ profile.full_name }}" required autocomplete="name"></div>
+        <div class="field"><label for="f-preferred_name">Preferred name</label><input class="input" id="f-preferred_name" name="preferred_name" value="{{ profile.preferred_name or '' }}" autocomplete="nickname"><span class="hint">Used in greetings and “preferred name” fields.</span></div>
+        <div class="field"><label for="f-email">Email <span class="req">*</span></label><input class="input" id="f-email" name="email" type="email" value="{{ profile.email or '' }}" required autocomplete="email"></div>
+        <div class="field"><label for="f-phone">Phone</label><input class="input" id="f-phone" name="phone" type="tel" value="{{ profile.phone or '' }}" autocomplete="tel" placeholder="+1 206 555 0100"></div>
+        <div class="field"><label for="f-home">Home location</label><input class="input" id="f-home" name="home_location" value="{{ profile.home_location or '' }}" list="locationOptions" placeholder="Seattle, WA"></div>
+        <div class="field"><label for="f-li">LinkedIn URL</label><input class="input" id="f-li" name="linkedin_url" type="url" value="{{ profile.linkedin_url or '' }}" placeholder="https://www.linkedin.com/in/…" pattern="https://(www\.)?linkedin\.com/.+">
+          {% if profile.linkedin_url and 'your-name' in profile.linkedin_url %}<span class="hint" style="color:var(--warm)">This still looks like a placeholder.</span>{% endif %}</div>
+        <div class="field full"><label for="f-gh">GitHub URL</label><input class="input" id="f-gh" name="github_url" type="url" value="{{ profile.github_url or '' }}" placeholder="https://github.com/…"></div>
+      </div>
+      <div class="card-foot"><span class="soft">Filled into every application form.</span><button class="btn primary" type="submit">Save identity</button></div>
+    </form>
+
+    <!-- Search -->
+    <form class="card" id="search" data-form="profile-search">
+      <div class="card-head"><div><div class="eyebrow">Search preferences</div><h2>What jobs to look for and how to score them</h2></div></div>
+      <div class="card-body form-grid">
+        <div class="field full"><span class="field-label">Target roles</span>{{ tags('rolesInput', 'role_families', 'role_families', profile.role_families, 'Add a role, e.g. AI Engineer') }}
+          {% if suggested_roles %}<div class="chip-suggestions">{% for r in suggested_roles %}<button type="button" data-action="add-chip" data-target="rolesInput">{{ r }}</button>{% endfor %}</div>{% endif %}</div>
+        <div class="field full"><span class="field-label">Skills <span class="soft">({{ (profile.skills or []) | length }})</span></span>{{ tags('skillsInput', 'skills', 'skills', profile.skills, 'Add a skill, e.g. FastAPI') }}
+          {% if suggested_skills %}
+          <div class="callout" style="margin-top:8px"><svg class="icon"><use href="#i-spark"/></svg><div style="flex:1"><strong>Found in your resume:</strong> click to add.
+            <div class="chip-suggestions">{% for s in suggested_skills %}<button type="button" data-action="add-chip" data-target="skillsInput">{{ s }}</button>{% endfor %}</div>
+            <button class="btn sm" type="button" style="margin-top:8px" data-action="add-all-chips" data-target="skillsInput">Add all {{ suggested_skills | length }}</button></div></div>
+          {% endif %}</div>
+        <div class="field full"><span class="field-label">Preferred locations</span>{{ tags('locInput', 'preferred_locations', 'locations', profile.preferred_locations, 'Add a city or Remote (US)') }}<span class="hint">Jobs outside these (and your radius) are filtered out during scans.</span></div>
+        <div class="field"><label for="f-radius">Search radius</label>
+          <select class="select" id="f-radius" name="search_radius_miles">{% for m in [10, 25, 50, 100, 250, 500] %}<option value="{{ m }}" {{ 'selected' if profile.search_radius_miles == m }}>{{ m }} miles</option>{% endfor %}
+            {% if profile.search_radius_miles not in [10, 25, 50, 100, 250, 500] %}<option value="{{ profile.search_radius_miles }}" selected>{{ profile.search_radius_miles }} miles</option>{% endif %}</select></div>
+        <div class="field"><span class="field-label">Work arrangements</span>
+          <div class="card" style="padding:0 12px;background:transparent">
+            {% for key, label in [('remote_allowed', 'Remote'), ('hybrid_allowed', 'Hybrid'), ('onsite_allowed', 'On-site')] %}
+            <label class="switch"><span class="switch-text"><strong>{{ label }}</strong></span><input type="checkbox" name="{{ key }}" {{ 'checked' if profile[key] }}><span class="track"></span></label>
+            {% endfor %}
+          </div></div>
+        <div class="field"><label for="f-min-sal">Minimum salary</label><div class="input-group"><span class="addon">$</span><input class="input" id="f-min-sal" name="minimum_salary" type="number" min="0" step="5000" value="{{ profile.minimum_salary or '' }}" placeholder="120000"></div><span class="hint">Jobs paying less fail the salary constraint.</span></div>
+        <div class="field"><label for="f-tgt-sal">Target salary</label><div class="input-group"><span class="addon">$</span><input class="input" id="f-tgt-sal" name="target_salary" type="number" min="0" step="5000" value="{{ profile.target_salary or '' }}" placeholder="160000"></div><span class="hint">Used for “desired salary” when it's inside the posted range.</span></div>
+        <div class="field"><label for="f-yrs">Years of professional software experience</label><input class="input" id="f-yrs" name="years_professional_software" type="number" min="0" max="50" step="0.5" value="{{ profile.years_professional_software or 0 }}"></div>
+        <div class="field"><label for="f-yrs-hands">Years hands-on (incl. projects, school)</label><input class="input" id="f-yrs-hands" name="years_hands_on_software" type="number" min="0" max="50" step="0.5" value="{{ profile.years_hands_on_software or 0 }}"></div>
+        <div class="field full"><label for="f-eeo">Voluntary EEO questions <span class="soft">(gender, race, veteran, disability)</span></label>
+          <select class="select" id="f-eeo" name="eeo_preference">{% for v, label in ui.eeo_preferences %}<option value="{{ v }}" {{ 'selected' if (profile.eeo_preference or '') == v }}>{{ label }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="card-foot"><span class="soft">Changes apply to the next analysis.</span><button class="btn primary" type="submit">Save preferences</button></div>
+    </form>
+
+    <!-- Legal -->
+    <form class="card {{ '' if profile.legal_answers_verified_at else 'warn' }}" id="legal" data-form="profile-legal">
+      <div class="card-head"><div><div class="eyebrow">Work authorization · verified by you only</div><h2>Answers CareerOps gives to legal questions</h2>
+        <p>Never inferred. Until these are verified, every application pauses on work-authorization and sponsorship questions.</p></div>
+        {% if profile.legal_answers_verified_at %}<span class="badge good"><svg class="icon" style="width:12px;height:12px"><use href="#i-check"/></svg>Verified</span>{% else %}<span class="badge warn">Not verified</span>{% endif %}</div>
+      <div class="card-body form-grid">
+        {{ tri('authorized_to_work_us', 'Currently authorized to work in the U.S.?', profile.authorized_to_work_us) }}
+        <div class="field"><label for="f-auth-type">Authorization type</label>
+          <select class="select" id="f-auth-type" name="work_authorization_type"><option value="">Choose…</option>
+            {% for t in ui.work_auth_types %}<option {{ 'selected' if profile.work_authorization_type == t }}>{{ t }}</option>{% endfor %}
+            {% if profile.work_authorization_type and profile.work_authorization_type not in ui.work_auth_types %}<option selected>{{ profile.work_authorization_type }}</option>{% endif %}</select></div>
+        {{ tri('requires_current_sponsorship', 'Need sponsorship now?', profile.requires_current_sponsorship) }}
+        {{ tri('requires_future_sponsorship', 'Will need sponsorship in the future?', profile.requires_future_sponsorship) }}
+        <div class="field"><label for="f-auth-exp">Authorization expires <span class="soft">(optional)</span></label><input class="input" id="f-auth-exp" name="work_authorization_expiration" type="date" value="{{ profile.work_authorization_expiration or '' }}"></div>
+      </div>
+      <div class="card-foot"><span class="soft">{% if profile.legal_answers_verified_at %}Verified <time datetime="{{ profile.legal_answers_verified_at | iso }}" data-format="date">{{ profile.legal_answers_verified_at | short_dt }}</time>{% else %}You confirm before anything is saved.{% endif %}</span>
+        <button class="btn primary" type="submit"><svg class="icon"><use href="#i-shield"/></svg>Verify &amp; save</button></div>
+    </form>
+
+    <!-- Links -->
+    <section class="card" id="links">
+      <div class="card-head"><div><div class="eyebrow">Links</div><h2>Portfolio, projects and more</h2><p>The first portfolio or website link goes into “Website” fields; links are also used as evidence.</p></div></div>
+      <div class="card-body flush">
+        <div class="list">
+          {% for link in links %}
+            <div class="list-item"><svg class="icon" style="color:var(--accent)"><use href="#i-link"/></svg>
+              <div class="grow"><strong>{{ link.label }}</strong><a class="sub link" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url }}</a></div>
+              <span class="badge neutral">{{ link.link_type }}</span>
+              <button class="btn sm ghost icon-only" type="button" data-action="delete-link" data-id="{{ link.id }}" aria-label="Remove {{ link.label }}"><svg class="icon"><use href="#i-trash"/></svg></button></div>
+          {% else %}<div class="empty" style="padding:24px"><span>No extra links yet.</span></div>{% endfor %}
+        </div>
+      </div>
+      <form class="card-foot" data-form="add-link" style="flex-wrap:wrap;justify-content:flex-start">
+        <input class="input" name="label" placeholder="Label, e.g. Digital Twin" required style="flex:1 1 160px;width:auto">
+        <select class="select" name="link_type" style="width:auto">{% for v, label in ui.link_types %}<option value="{{ v }}">{{ label }}</option>{% endfor %}</select>
+        <input class="input" name="url" type="url" placeholder="https://…" required style="flex:2 1 240px;width:auto">
+        <button class="btn" type="submit"><svg class="icon"><use href="#i-plus"/></svg>Add link</button>
+      </form>
+    </section>
+  </div>
+</div>
+<datalist id="locationOptions">{% for l in ui.locations %}<option value="{{ l }}">{% endfor %}</datalist>
 {% endblock %}

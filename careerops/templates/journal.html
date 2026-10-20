@@ -1,7 +1,73 @@
-{% extends 'base.html' %}{% block title %}Build Journal — CareerOps{% endblock %}{% block content %}
-<header class='top'><div><div class='eyebrow'>LIVING CAREER MEMORY</div><h1>Build Journal</h1><p>Record what you actually built and learned. Each entry becomes evidence CareerOps can retrieve for future jobs, resumes, cover letters and interview stories.</p></div></header>
-<section class='grid2 journal-layout'><form class='panel' id='journalForm'><span class='eyebrow'>NEW ENTRY</span><h2>What did you do today?</h2><label>Date<input id='journalDate' name='entry_date' type='date'></label><label>Title<input id='journalTitle' name='title' placeholder='CareerOps: application verification + evidence memory'></label><label>Project / context<input id='journalProject' name='project' placeholder='CareerOps / AegisOps / work / class'></label><label>What I built / changed<textarea id='journalBuilt' name='what_built' rows='4' placeholder='Describe the concrete thing you implemented or completed.'></textarea></label><label>Problem I was solving<textarea id='journalProblem' name='problem_solved' rows='3'></textarea></label><label>Architecture / decisions<textarea id='journalDecisions' name='architecture_decisions' rows='3' placeholder='Why this design? What did you decide?'></textarea></label><label>Tradeoffs<textarea id='journalTradeoffs' name='tradeoffs' rows='3' placeholder='What did you gain or give up? What alternatives did you reject?'></textarea></label><label>Time spent (hours)<input id='journalHours' name='time_spent_hours' type='number' min='0' step='0.25'></label><label>Impact / how it helped<textarea id='journalImpact' name='impact' rows='3' placeholder='Example: reduced manual checking, made submissions auditable, removed a repeated workflow.'></textarea></label><label>Measured metrics <small>(one per line; only enter what you actually measured)</small><textarea id='journalMetrics' name='metrics_text' rows='4' placeholder='applications_prepared: 8&#10;average_review_time: 12 min'></textarea></label><label>Skills / technologies <small>(comma or new line)</small><textarea id='journalSkills' name='skills_text' rows='3' placeholder='FastAPI, PostgreSQL, Playwright, system design'></textarea></label><label>Links <small>(one URL per line)</small><textarea id='journalLinks' name='links_text' rows='3' placeholder='https://github.com/...&#10;https://demo...'></textarea></label><label>What I learned / what I would change<textarea id='journalLessons' name='lessons' rows='3'></textarea></label><button class='btn' type='button' onclick='saveJournalEntry()'>Save as career evidence</button></form>
-<div class='panel'><span class='eyebrow'>WHY THIS MATTERS</span><h2>CareerOps retrieval memory</h2><p class='muted'>The Resume Agent no longer has to rely only on an old PDF. Your journal entries are converted into structured <strong>CandidateEvidence</strong> and ranked against each job description.</p><div class='review-box'><strong>Truth rule</strong><span>Metrics are only treated as verified when you explicitly type them. CareerOps does not infer impact numbers from prose.</span></div><div class='agent-flow journal-flow'><span>Daily entry</span><b>→</b><span>CandidateEvidence</span><b>→</b><span>Job fit</span><b>→</b><span>Resume / cover letter</span><b>→</b><span>Interview stories</span></div></div></section>
-<section class='panel'><div class='panel-head'><div><span class='eyebrow'>HISTORY</span><h2>Your recent build evidence</h2></div><span class='muted'>{{entries|length}} entries</span></div>{% for e in entries %}<details class='journal-entry'><summary><div><strong>{{e.title}}</strong><span>{{e.entry_date}}{% if e.project %} · {{e.project}}{% endif %}</span></div><span class='pill apply'>Evidence #{{e.evidence_id}}</span></summary><div class='journal-body'><h3>Built</h3><p>{{e.what_built}}</p>{% if e.problem_solved %}<h3>Problem</h3><p>{{e.problem_solved}}</p>{% endif %}{% if e.architecture_decisions %}<h3>Architecture / decisions</h3><p>{{e.architecture_decisions}}</p>{% endif %}{% if e.tradeoffs %}<h3>Tradeoffs</h3><p>{{e.tradeoffs}}</p>{% endif %}{% if e.impact %}<h3>Impact</h3><p>{{e.impact}}</p>{% endif %}{% if e.time_spent_hours is not none %}<p><strong>Time:</strong> {{e.time_spent_hours}} hours</p>{% endif %}{% if e.metrics %}<h3>Verified metrics you entered</h3><div class='tags'>{% for k,v in e.metrics.items() %}<span class='tag good'>{{k}}: {{v}}</span>{% endfor %}</div>{% endif %}{% if e.skills %}<h3>Skills</h3><div class='tags'>{% for s in e.skills %}<span class='tag'>{{s}}</span>{% endfor %}</div>{% endif %}{% if e.links %}<h3>Links</h3>{% for url in e.links %}<a class='evidence-link' href='{{url}}' target='_blank' rel='noopener'>{{url}} ↗</a>{% endfor %}{% endif %}{% if e.lessons %}<h3>Lessons</h3><p>{{e.lessons}}</p>{% endif %}<button class='mini danger-text' onclick='deleteJournalEntry({{e.id}})'>Delete entry</button></div></details>{% else %}<div class='empty'><h2>No journal evidence yet.</h2><p class='muted'>Your first entry can be the CareerOps system you just built.</p></div>{% endfor %}</section>
-<script>if(document.getElementById('journalDate')&&!document.getElementById('journalDate').value){document.getElementById('journalDate').value=new Date().toISOString().slice(0,10)}</script>
+{% extends 'base.html' %}
+{% block title %}Build Journal{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <div class="eyebrow">Living career memory</div>
+    <h1>Build Journal</h1>
+    <p>Log what you build. Each entry becomes evidence CareerOps can use in fit scoring, tailored resumes, cover letters and interview stories.</p>
+  </div>
+</header>
+
+<section class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  <div class="stat"><span>Entries</span><strong>{{ entries | length }}</strong><small>each one is retrievable evidence</small></div>
+  <div class="stat"><span>Hours logged</span><strong>{{ '%g' % total_hours }}</strong><small>across all entries</small></div>
+  <div class="stat"><span>Projects</span><strong>{{ projects | length }}</strong><small>{{ projects[:3] | join(', ') or '—' }}</small></div>
+</section>
+
+<div class="grid grid-main">
+  <form class="card" data-form="journal">
+    <div class="card-head"><div><div class="eyebrow">New entry</div><h2>What did you build?</h2><p>Only the first three fields are required. Numbers count as measured only if you type them in Metrics.</p></div></div>
+    <div class="card-body form-grid">
+      <div class="field"><label for="j-date">Date <span class="req">*</span></label><input class="input" id="j-date" name="entry_date" type="date" required data-today></div>
+      <div class="field"><label for="j-project">Project</label><input class="input" id="j-project" name="project" list="projectOptions" placeholder="CareerOps"></div>
+      <div class="field full"><label for="j-title">Title <span class="req">*</span></label><input class="input" id="j-title" name="title" required placeholder="Rebuilt the browser agent's form filling"></div>
+      <div class="field full"><label for="j-built">What you built or changed <span class="req">*</span></label><textarea class="textarea" id="j-built" name="what_built" rows="4" required placeholder="The concrete thing you implemented, shipped or completed."></textarea></div>
+      <div class="field full"><span class="field-label">Skills used</span>
+        <div class="tag-input" id="journalSkills" data-source="skills"><input type="hidden" name="skills" value="[]"><input type="text" placeholder="Add skills, e.g. Playwright" aria-label="Skills used" autocomplete="off"></div></div>
+      <div class="field"><label for="j-hours">Time spent</label><div class="input-group"><span class="addon"><svg class="icon"><use href="#i-clock"/></svg></span><input class="input" id="j-hours" name="time_spent_hours" type="number" min="0" step="0.25" placeholder="hours"></div></div>
+      <div class="field"><label for="j-impact">Impact</label><input class="input" id="j-impact" name="impact" placeholder="What it made possible"></div>
+      <details class="disclosure full" style="border:1px solid var(--line);border-radius:var(--radius)">
+        <summary><span>More detail — problem, decisions, trade-offs, metrics, links, lessons</span></summary>
+        <div class="disclosure-body form-grid">
+          <div class="field full"><label for="j-problem">Problem you were solving</label><textarea class="textarea" id="j-problem" name="problem_solved" rows="2"></textarea></div>
+          <div class="field"><label for="j-dec">Architecture / decisions</label><textarea class="textarea" id="j-dec" name="architecture_decisions" rows="3" placeholder="Why this design?"></textarea></div>
+          <div class="field"><label for="j-trade">Trade-offs</label><textarea class="textarea" id="j-trade" name="tradeoffs" rows="3" placeholder="What you gained or gave up"></textarea></div>
+          <div class="field"><label for="j-metrics">Measured metrics</label><textarea class="textarea mono" id="j-metrics" name="metrics_text" rows="3" placeholder="tests_passing: 42&#10;p95_latency_ms: 180"></textarea><span class="hint">One per line as <code>name: value</code>. Only what you actually measured.</span></div>
+          <div class="field"><label for="j-links">Links</label><textarea class="textarea" id="j-links" name="links_text" rows="3" placeholder="https://github.com/…"></textarea><span class="hint">One URL per line.</span></div>
+          <div class="field full"><label for="j-lessons">What you learned / would change</label><textarea class="textarea" id="j-lessons" name="lessons" rows="2"></textarea></div>
+        </div>
+      </details>
+    </div>
+    <div class="card-foot"><span class="soft">Saved as CandidateEvidence immediately.</span><button class="btn primary" type="submit"><svg class="icon"><use href="#i-plus"/></svg>Save entry</button></div>
+  </form>
+
+  <section class="card">
+    <div class="card-head"><div><div class="eyebrow">History</div><h2>Recent entries</h2></div></div>
+    <div class="card-body flush">
+      {% for e in entries %}
+      <details class="disclosure">
+        <summary><div class="grow" style="min-width:0"><strong style="display:block">{{ e.title }}</strong>
+          <span class="soft" style="font-size:12px"><time datetime="{{ e.entry_date }}" data-format="date">{{ e.entry_date }}</time>{% if e.project %} · {{ e.project }}{% endif %}{% if e.time_spent_hours %} · {{ '%g' % e.time_spent_hours }} h{% endif %}</span></div></summary>
+        <div class="disclosure-body prose">
+          <p>{{ e.what_built }}</p>
+          {% if e.problem_solved %}<h3>Problem</h3><p>{{ e.problem_solved }}</p>{% endif %}
+          {% if e.architecture_decisions %}<h3>Decisions</h3><p>{{ e.architecture_decisions }}</p>{% endif %}
+          {% if e.tradeoffs %}<h3>Trade-offs</h3><p>{{ e.tradeoffs }}</p>{% endif %}
+          {% if e.impact %}<h3>Impact</h3><p>{{ e.impact }}</p>{% endif %}
+          {% if e.metrics %}<h3>Measured</h3><div class="tag-list">{% for k, v in e.metrics.items() %}<span class="tag good">{{ k }}: {{ v }}</span>{% endfor %}</div>{% endif %}
+          {% if e.skills %}<h3>Skills</h3><div class="tag-list">{% for s in e.skills %}<span class="tag">{{ s }}</span>{% endfor %}</div>{% endif %}
+          {% if e.links %}<h3>Links</h3>{% for url in e.links %}<p><a class="link" href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a></p>{% endfor %}{% endif %}
+          {% if e.lessons %}<h3>Lessons</h3><p>{{ e.lessons }}</p>{% endif %}
+          <div class="actions" style="margin-top:14px"><span class="badge neutral">evidence #{{ e.evidence_id }}</span><span class="spacer"></span>
+            <button class="btn sm danger" type="button" data-action="delete-journal" data-id="{{ e.id }}"><svg class="icon"><use href="#i-trash"/></svg>Delete</button></div>
+        </div>
+      </details>
+      {% else %}
+        <div class="empty"><svg class="icon"><use href="#i-book"/></svg><strong>No entries yet</strong><span>Your first one could be the CareerOps work you just did.</span></div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+<datalist id="projectOptions">{% for p in projects %}<option value="{{ p }}">{% endfor %}<option value="CareerOps"><option value="Digital Twin"><option value="AegisOps"></datalist>
 {% endblock %}
