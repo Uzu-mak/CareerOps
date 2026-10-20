@@ -189,3 +189,19 @@ def test_unlisted_school_picks_other():
     facts = build_facts(profile(education_school='Bellevue College'))
     plan = plan_application([field('Which university did you attend?', 'select', True, options=['Stanford University', 'Other (School Not Listed)'])], facts)
     assert ops(plan) == {'Which university did you attend?': ('select', 'Other (School Not Listed)')}
+
+
+def test_work_authorization_answered_in_sentences():
+    opts = ['Select...', 'I am authorized to work in the United States for any employer',
+            'I am authorized to work in the United States but will require sponsorship now or in the future',
+            'I am not authorized to work in the United States']
+    q = 'Are you legally authorized to work in the United States?'
+    got = ops(plan_application([field(q, 'select', True, options=opts)], build_facts(profile())))
+    assert got[q] == ('select', opts[1])
+    got = ops(plan_application([field(q, 'select', True, options=opts)], build_facts(profile(requires_future_sponsorship=True))))
+    assert got[q] == ('select', opts[2])
+    got = ops(plan_application([field(q, 'select', True, options=opts)], build_facts(profile(authorized_to_work_us=False))))
+    assert got[q] == ('select', opts[3])
+    two = ['I am authorized for any employer', 'I am authorized for my present employer only']
+    plan = plan_application([field(q, 'select', True, options=two)], build_facts(profile(requires_future_sponsorship=None, requires_current_sponsorship=None)))
+    assert plan.actions == [] and plan.unresolved   # ambiguous: you decide

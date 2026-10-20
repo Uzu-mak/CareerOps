@@ -213,6 +213,62 @@
   }
 
   // ------------------------------------------------------------------ actions (click)
+  // ---- review answers: never run with an answer you changed but did not save
+  const reviewValue = (card) => {
+    const multi = card.querySelector('[data-multi]');
+    return multi ? $$('input:checked', multi).map((c) => c.value).join(' | ') : (fieldValue(card, 'answer') || '');
+  };
+  const reviewCards = () => $$('.review-q[data-question]').filter((c) => c.querySelector('[name=answer], [data-multi]'));
+  const setReviewBadge = (card, text, tone) => {
+    const b = card.querySelector('.badge'); if (b) { b.className = `badge ${tone}`; b.textContent = text; }
+  };
+  const refreshReviewFoot = () => {
+    const status = document.querySelector('[data-review-status]'); if (!status) return;
+    const cards = reviewCards();
+    const unsaved = cards.filter((c) => c.dataset.dirty).length;
+    const open = cards.filter((c) => !c.classList.contains('is-done') && !c.dataset.dirty).length;
+    status.textContent = unsaved ? `${unsaved} unsaved change(s) — saved automatically when you run.`
+      : open ? `${open} question(s) still need an answer.` : 'All answers saved. They are filled automatically on the next run.';
+    status.style.color = unsaved || open ? 'var(--warm)' : '';
+  };
+  const saveReviewCard = async (card) => {
+    const answer = reviewValue(card);
+    const app = card.querySelector('[data-action=save-review]')?.dataset.app;
+    if (!app || !String(answer).trim()) return false;
+    await api(`/api/applications/${app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
+    card.dataset.saved = answer; delete card.dataset.dirty;
+    card.classList.add('is-done'); setReviewBadge(card, 'Answered', 'good'); refreshReviewFoot();
+    return true;
+  };
+  /** Before any run: save edited answers, and warn about questions still blank. False = cancelled. */
+  const readyToRun = async () => {
+    const cards = reviewCards();
+    const dirty = cards.filter((c) => c.dataset.dirty && String(reviewValue(c)).trim());
+    for (const c of dirty) await saveReviewCard(c);
+    if (dirty.length) toast(`Saved ${dirty.length} answer(s) before running.`, { title: 'Answers saved' });
+    const open = cards.filter((c) => !c.classList.contains('is-done'));
+    if (!open.length) return true;
+    return confirmDialog({
+      title: `${open.length} question(s) still unanswered`,
+      body: `${open.slice(0, 3).map((c) => `“${c.dataset.question}”`).join(', ')}${open.length > 3 ? ' and more' : ''}. The run will stop at these again. Run anyway?`,
+      ok: 'Run anyway',
+    });
+  };
+  reviewCards().forEach((c) => { if (c.classList.contains('is-done')) c.dataset.saved = reviewValue(c); });
+  const markReviewDirty = (e) => {
+    const card = e.target.closest('.review-q[data-question]');
+    if (!card || e.target.name === 'notes' || !card.querySelector('[data-action=save-review]')) return;
+    if (reviewValue(card) === (card.dataset.saved ?? '') && card.dataset.saved !== undefined) {
+      delete card.dataset.dirty; card.classList.add('is-done'); setReviewBadge(card, 'Answered', 'good');
+    } else {
+      card.dataset.dirty = '1'; card.classList.remove('is-done'); setReviewBadge(card, 'Unsaved', 'warn');
+    }
+    refreshReviewFoot();
+  };
+  document.addEventListener('change', markReviewDirty);
+  document.addEventListener('input', markReviewDirty);
+  refreshReviewFoot();
+
   const actions = {
     async scan() {
       const t = toast('Checking every enabled source…', { title: 'Scanning', timeout: 0 });
@@ -248,11 +304,13 @@
       toast(`Resume, cover letter and answers ready${x.review_reasons.length ? ` · ${x.review_reasons.length} to review` : ''}`, { title: 'Package generated' }); reload(900);
     },
     async 'dry-run'(btn) {
+      if (!(await readyToRun())) return;
       const t = toast('Opening the application and filling it — this can take a minute.', { title: 'Dry run (no submit)', timeout: 0 });
       try { const x = await api(`/api/jobs/${btn.dataset.id}/apply-live`, { method: 'POST', query: { submit: false } }); t.remove(); showResult(x); }
       catch (e) { t.remove(); fail(e, 'Dry run failed'); }
     },
     async apply(btn) {
+      if (!(await readyToRun())) return;
       const ok = await confirmDialog({
         title: 'Submit this application?',
         body: 'CareerOps will tailor your documents, fill the employer form and submit it. It stops instead of submitting if it meets a CAPTCHA, a sign-in wall or a question you have not answered.',
@@ -278,12 +336,10 @@
     async 'save-review'(btn) {
       const card = btn.closest('.review-q');
       const multi = card.querySelector('[data-multi]');
-      const answer = multi ? $$('input:checked', multi).map((c) => c.value).join(' | ') : fieldValue(card, 'answer');
-      if (!String(answer || '').trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
-      const x = await api(`/api/applications/${btn.dataset.app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
-      card.classList.add('is-done');
-      const left = $$('.review-q:not(.is-done)').filter((c) => c.querySelector('[name=answer], [data-multi]')).length;
-      if (left) { toast(`${left} question(s) left`, { title: 'Answer saved' }); return; }
+      if (!String(reviewValue(card)).trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
+      await saveReviewCard(card);
+      const left = reviewCards().filter((c) => !c.classList.contains('is-done') || c.dataset.dirty).length;
+      if (left) { toast(`${left} question(s) still need saving or an answer`, { title: 'Answer saved' }); return; }
       toast('Every question is answered.', { title: 'Answer saved' });
       const jobId = document.querySelector('[data-action="apply"]')?.dataset.id;
       if (!jobId) { reload(1200); return; }

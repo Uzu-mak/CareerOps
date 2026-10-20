@@ -225,6 +225,7 @@ class Answer:
     value: str          # text to type, or the intent for choice fields
     source: str         # approved | profile | verified | eeo-preference | answer-bank | file
     kind: str = 'text'  # text | yesno | decline | file
+    needs_sponsor: bool | None = None   # work-authorization answers: pick between "authorized" statements
 
 
 def lookup(store: dict[str, str], label: str) -> str | None:
@@ -254,7 +255,8 @@ def answer_for(field_: dict, facts: Facts) -> tuple[Answer | None, str]:
     if cat == 'work_auth':
         if facts.authorized is None:
             return None, cat
-        return Answer('Yes' if facts.authorized else 'No', 'verified', 'yesno'), cat
+        need = None if facts.sponsor_now is None and facts.sponsor_future is None else bool(facts.sponsor_now or facts.sponsor_future)
+        return Answer('Yes' if facts.authorized else 'No', 'verified', 'yesno', need), cat
     if cat == 'sponsorship':
         need = _sponsorship_need(norm(label), facts)
         if need is None:
@@ -328,7 +330,7 @@ def choose_option(options: list[str], answer: Answer) -> int | None:
         for i in real:
             if (yes and normed[i].startswith(('i agree', 'agree', 'i acknowledge', 'i consent'))):
                 return i
-        return None
+        return _statement_option(normed, real, yes, answer.needs_sponsor)
     for i in real:
         if normed[i] == want:
             return i
@@ -345,6 +347,29 @@ def choose_option(options: list[str], answer: Answer) -> int | None:
         if score > best_score:
             best, best_score = i, score
     return best if best_score >= 0.5 else None
+
+
+NEGATED = r"\b(not|no|don't|do not|cannot|can't|unable|won't|will not)\b"
+QUALIFIED = r'\b(sponsor(ship)?|visa|h-?1b|opt|cpt|ead|require|requires|requiring|but|only|present employer|current employer)\b'
+
+
+def _statement_option(normed: list[str], real: list[int], yes: bool, needs_sponsor: bool | None) -> int | None:
+    """Forms that answer in sentences ("I am authorized to work … for any employer").
+
+    Picks only when exactly one option says it; anything ambiguous goes to review.
+    """
+    real = [i for i in real if not _has(DECLINE, normed[i])]
+    negated = [i for i in real if _has(NEGATED, normed[i])]
+    if not yes:
+        return negated[0] if len(negated) == 1 else None
+    plain = [i for i in real if i not in negated]
+    if len(plain) == 1:
+        return plain[0]
+    if needs_sponsor is None:
+        return None
+    sponsor = [i for i in plain if _has(r'\b(sponsor(ship)?|visa|h-?1b)\b', normed[i])]
+    pick = sponsor if needs_sponsor else [i for i in plain if not _has(QUALIFIED, normed[i])]
+    return pick[0] if len(pick) == 1 else None
 
 
 # --------------------------------------------------------------------------- plan

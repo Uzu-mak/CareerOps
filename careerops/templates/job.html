@@ -185,8 +185,8 @@
         <div class="empty"><svg class="icon"><use href="#i-check"/></svg><strong>No questions to answer</strong><span>{% if application %}Nothing on this form is waiting for your answer.{% else %}Run a dry run to see which questions this form asks.{% endif %}</span></div>
       {% endfor %}
     </div>
-    {% if open_questions | length < review_items | length and apply_url %}
-    <div class="card-foot"><span class="muted">Answered questions are filled automatically on the next run.</span>
+    {% if review_items and apply_url %}
+    <div class="card-foot"><span class="muted" data-review-status>Answered questions are filled automatically on the next run.</span>
       <div class="actions"><button class="btn sm" type="button" data-action="dry-run" data-id="{{ job.id }}">Dry run again</button><button class="btn sm primary" type="button" data-action="apply" data-id="{{ job.id }}">Apply</button></div></div>
     {% endif %}
   </div>
