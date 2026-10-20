@@ -44,6 +44,8 @@ def _ensure_schema_compatibility():
         "ALTER TABLE source_configs ALTER COLUMN token_or_url TYPE TEXT",
         "ALTER TABLE source_configs ALTER COLUMN last_status TYPE TEXT",
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS eeo_preference VARCHAR(20)",
+        "ALTER TABLE job_postings ALTER COLUMN location TYPE TEXT",
+        "ALTER TABLE job_postings ALTER COLUMN source_job_id TYPE TEXT",
     ]
     with engine.begin() as conn:
         for statement in statements:

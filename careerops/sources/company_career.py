@@ -147,8 +147,13 @@ def _job_location(v):
     for row in rows:
         if not isinstance(row,dict): continue
         addr=row.get('address') or {}
-        s=', '.join([str(addr.get(k)) for k in ['addressLocality','addressRegion','addressCountry'] if addr.get(k)])
-        if s: parts.append(s)
+        vals=[]
+        for k in ['addressLocality','addressRegion','addressCountry']:
+            x=addr.get(k)
+            if isinstance(x,dict): x=x.get('name') or x.get('@id')
+            if x: vals.append(str(x).strip())
+        s=', '.join(vals)
+        if s and s not in parts: parts.append(s)
     return '; '.join(parts) or None
 
 def _dedupe(rows):

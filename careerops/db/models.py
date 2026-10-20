@@ -133,13 +133,14 @@ class JobPosting(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[str] = mapped_column(String(80), default='manual')
-    source_job_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_job_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     ats: Mapped[str | None] = mapped_column(String(80), nullable=True)
     canonical_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     application_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     company: Mapped[str] = mapped_column(String(220))
     title: Mapped[str] = mapped_column(String(320))
-    location: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    # Multi-city postings list every city (used by the location filter), so no length cap.
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
     workplace_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     employment_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
     description: Mapped[str] = mapped_column(Text)

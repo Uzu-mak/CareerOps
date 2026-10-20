@@ -63,6 +63,11 @@ def upsert_job(db: Session, data: dict) -> tuple[JobPosting, bool]:
         db.commit(); db.refresh(existing)
         return existing, False
     filtered = {k:v for k,v in data.items() if k in {c.name for c in JobPosting.__table__.columns}}
+    # Sources occasionally send values longer than a column allows; trim instead of failing the scan.
+    for col in JobPosting.__table__.columns:
+        limit=getattr(col.type,'length',None)
+        if limit and isinstance(filtered.get(col.name),str) and len(filtered[col.name])>limit:
+            filtered[col.name]=filtered[col.name][:limit]
     for dt_key in ('posted_at','deadline','last_verified_at'):
         filtered[dt_key]=_parse_dt(filtered.get(dt_key))
     filtered['fingerprint']=fp

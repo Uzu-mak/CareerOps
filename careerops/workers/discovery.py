@@ -91,10 +91,12 @@ async def scan_enabled_sources(analyze_new: bool = True, force: bool=False, trig
                                     elif app.requires_human_review: notify_application_event(db,'human_review',app,job,result.get('reason',''))
                 cfg.last_run_at=datetime.now(timezone.utc); cfg.last_status='success'; cfg.last_count=len(fetched); db.add(cfg); db.commit()
             except Exception as exc:
+                db.rollback()  # a failed insert poisons the session; reset it before recording the error
                 cfg.last_run_at=datetime.now(timezone.utc); cfg.last_status=f'error: {str(exc)[:220]}'; db.add(cfg); db.commit(); totals['errors'].append({'source':cfg.name,'error':str(exc)})
         run.totals=totals; run.finished_at=datetime.now(timezone.utc); run.status='success' if not totals['errors'] else 'partial'; db.add(run); db.commit()
         return totals
     except Exception as exc:
+        db.rollback()
         totals['errors'].append({'run':'fatal','error':str(exc)}); run.totals=totals; run.finished_at=datetime.now(timezone.utc); run.status='error'; db.add(run); db.commit(); raise
     finally:
         db.close()
