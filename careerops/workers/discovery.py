@@ -101,4 +101,8 @@ async def scan_enabled_sources(analyze_new: bool = True, force: bool=False, trig
 
 
 if __name__ == '__main__':
+    # The watchtower / Cloud Run job can start before the web app has created
+    # the tables on a fresh database; creating them here is idempotent.
+    from careerops.db.init import create_all
+    create_all()
     print(asyncio.run(scan_enabled_sources()))
