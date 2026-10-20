@@ -59,6 +59,7 @@ def record_browser_result(db: Session, app: Application, result) -> Application:
         plan.update({'mode': plan.get('mode', 'REVIEW'), 'reason': detail.get('reason') or plan.get('reason'),
                      'field_type': detail.get('type'), 'options': detail.get('options') or []})
         answers[label] = plan
+    answers['_optional_blank'] = getattr(result, 'optional_blank', None) or {}
     app.answers = answers
 
     if result.submitted:

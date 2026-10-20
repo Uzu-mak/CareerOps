@@ -117,6 +117,15 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
                                  'answer':row.answer if row else None,'resolved':row.resolved if row else False,
                                  'notes':row.notes if row else None,'input':review_input(q, plan),'blocker':blocker_info(q),
                                  'field_type':plan.get('field_type'),'not_accepted':plan.get('not_accepted') and not (row and row.resolved)})
+    optional_items=[]
+    if app_row:
+        for q,detail in ((app_row.answers or {}).get('_optional_blank') or {}).items():
+            row=saved.get(q)
+            if row and row.resolved and row.answer: continue
+            plan={'field_type':detail.get('type'),'options':detail.get('options') or []}
+            optional_items.append({'question':q,'mode':'OPTIONAL','suggested_answer':None,'reason':detail.get('reason'),'answer':row.answer if row else None,
+                                   'resolved':False,'notes':row.notes if row else None,'input':review_input(q,plan),'blocker':None,
+                                   'field_type':plan['field_type'],'optional':True,'not_accepted':False})
     blockers=[x for x in review_items if x['blocker']]
     review_items=[x for x in review_items if not x['blocker']]
     # Each "Prepare documents" makes a new set; show the newest of each type.
@@ -132,7 +141,7 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
     auto_answers=db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app_row.id, ApplicationReviewAnswer.category=='auto_draft')).all() if app_row else []
     return _render(request, db, 'job.html', profile=profile, job=job, llm_enabled=(settings.llm_provider or 'local').lower()!='local', apply_mode=mode,
                    session_site=saved.company if saved else None, auto_answers=auto_answers, analysis=analysis, application=app_row, artifacts=artifacts,
-                   runs=runs, review_items=review_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
+                   runs=runs, review_items=review_items, optional_items=optional_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
                    verification=submission_evidence_summary(app_row) if app_row else None)
 
 

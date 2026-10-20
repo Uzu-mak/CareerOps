@@ -226,7 +226,7 @@
     const status = document.querySelector('[data-review-status]'); if (!status) return;
     const cards = reviewCards();
     const unsaved = cards.filter((c) => c.dataset.dirty).length;
-    const open = cards.filter((c) => !c.classList.contains('is-done') && !c.dataset.dirty).length;
+    const open = cards.filter((c) => !c.classList.contains('is-done') && !c.dataset.dirty && !('optional' in c.dataset)).length;
     status.textContent = unsaved ? `${unsaved} unsaved change(s) — saved automatically when you run.`
       : open ? `${open} question(s) still need an answer.` : 'All answers saved. They are filled automatically on the next run.';
     status.style.color = unsaved || open ? 'var(--warm)' : '';
@@ -251,7 +251,7 @@
     refreshReviewFoot();
   };
   const showFirstOpen = () => {
-    const c = reviewCards().find((x) => !x.classList.contains('is-done') || x.dataset.dirty);
+    const c = reviewCards().find((x) => x.dataset.dirty || (!x.classList.contains('is-done') && !('optional' in x.dataset)));
     if (!c) return;
     c.scrollIntoView({ behavior: 'smooth', block: 'center' });
     c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1600);
@@ -270,7 +270,7 @@
     const dirty = cards.filter((c) => c.dataset.dirty && String(reviewValue(c)).trim());
     for (const c of dirty) await saveReviewCard(c);
     if (dirty.length) toast(`Saved ${dirty.length} answer(s) before running.`, { title: 'Answers saved' });
-    const open = cards.filter((c) => !c.classList.contains('is-done'));
+    const open = cards.filter((c) => !c.classList.contains('is-done') && !('optional' in c.dataset));
     if (!open.length) return true;
     return confirmDialog({
       title: `${open.length} question(s) still unanswered`,
@@ -362,6 +362,7 @@
       const multi = card.querySelector('[data-multi]');
       if (!String(reviewValue(card)).trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
       const x = await saveReviewCard(card);
+      if ('optional' in card.dataset) { toast('Filled in on the next run.', { title: 'Optional answer saved' }); return; }
       const open = (x.open_questions || []).filter((q) => q !== card.dataset.question);
       const unsaved = reviewCards().filter((c) => c.dataset.dirty).length;
       if (open.length || unsaved) {

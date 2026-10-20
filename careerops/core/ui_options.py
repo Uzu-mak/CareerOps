@@ -142,6 +142,10 @@ BLOCKERS = [
     ('final submit control not detected', "Couldn't find the Submit button",
      'Every field was filled, but no Submit or Next button was recognised.',
      'Open the employer page, check the form and submit it yourself.'),
+    ('submission not accepted by the site', "The site didn't accept the automated submission",
+     'CareerOps clicked Submit, but the filled form was still on the page afterwards and no error was shown. '
+     'Some sites run a hidden bot check that quietly refuses automated submissions. You have not applied yet.',
+     'Run the "Finish in your browser" command on this job: it opens the form already filled in your own Chrome, and you click Submit yourself. Then click Mark as applied.'),
     ('submission confirmation not detected', 'Submitted, but no confirmation appeared',
      'CareerOps clicked Submit, but no "thank you" message appeared within 20 seconds, so it does not count the application as sent.',
      'Check your email for a confirmation from the employer. If you got one, set the status to Submitted.'),

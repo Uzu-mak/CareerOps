@@ -73,6 +73,10 @@ What it will not do:
 
 Big-company portals (Workday, Meta, Amazon…) make you sign in before a form exists. Run `signin.bat "https://site/login"` in the CareerOps folder: a normal Chrome window opens, you sign in yourself (including any emailed or texted code), press Enter, and the site's session cookies are saved. The agent then opens that site already signed in. Passwords are never seen or stored; delete a saved sign-in any time on **Sources & automation**. When a session expires, the job shows "Your saved sign-in has expired".
 
+Some sites quietly refuse a Submit that comes from an automated browser (a hidden bot check). The job then says "The site didn't accept the automated submission". Run `finish.bat 433` (the job number from `localhost:8001/jobs/433`): CareerOps fills the form in your own Chrome, lists anything still blank, and you check it and click Submit yourself. Answer `y` when it asks whether you saw a confirmation and the job is marked applied. CareerOps does not try to get past bot checks or CAPTCHAs.
+
+Optional fields CareerOps had no answer for are listed under **Optional · left blank** on the job's Review tab. Answer any you want sent and they're filled on the next run.
+
 ### Fewer questions
 
 - **Education** on your profile fills university, degree, major, graduation year, GPA and high-school questions; if your school isn't in a form's list, the form's "Other" option is chosen.

@@ -237,3 +237,27 @@ def test_drafter_that_declines_still_pauses(monkeypatch, tmp_path):
     result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK, approved_review_answers=answers, drafter=lambda q: None)
     assert not result.submitted
     assert result.manual_fields == ["What is the hardest technical challenge you've faced? (Approx. 200 words)"]
+
+
+def test_quietly_refused_submit_is_not_reported_as_maybe_submitted(monkeypatch, tmp_path):
+    monkeypatch.setattr(browser, '_confirm', functools.partial(browser._confirm, timeout_s=3))
+    result = _run(monkeypatch, tmp_path, 'refused/apply.html')
+    assert not result.submitted
+    assert 'submission not accepted by the site' in result.manual_fields
+    assert 'submission confirmation not detected' not in result.manual_fields
+    # optional fields it had no answer for are reported, with the form's own options
+    assert set(result.optional_blank) == {'Website', 'Pronouns'}
+    assert result.optional_blank['Pronouns']['options'] == ['she/her', 'he/him', 'they/them']
+
+
+def test_prefill_for_you_to_submit_never_clicks_submit(monkeypatch, tmp_path):
+    from careerops.agents.apply_plan import build_facts
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        b = p.chromium.launch(**browser._launch_options(settings, True))
+        page = b.new_page(); page.goto(f'{_base()}/refused/apply.html'); browser._settle(page)
+        out = browser.prefill(page, build_facts(_profile(), LINKS))
+        values = page.frames[0].evaluate("() => [document.querySelector('#n').value, document.querySelector('#w').value]")
+        assert values == ['Ada Lovelace', 'https://ada.dev']
+        assert out['missing'] == [] and out['optional'] == ['Pronouns']
+        b.close()

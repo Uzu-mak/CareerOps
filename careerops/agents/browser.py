@@ -84,6 +84,8 @@ class BrowserResult:
     # Essay answers CareerOps wrote during the run (auto-draft setting), so you can see what was sent.
     auto_answers: dict | None = None
     used_session: bool = False
+    # Optional fields left blank because there was no answer for them (label -> type/options).
+    optional_blank: dict | None = None
 
 
 def detect_portal(url: str | None) -> str:
@@ -377,6 +379,20 @@ def _fill_page(page, facts: Facts, filled: list[str], uploaded: list[str], uploa
     return form
 
 
+def _optional_blanks(form: _Form, facts: Facts, uploaded_keys: set[str]) -> dict:
+    """Optional fields still empty after filling: shown in Review so you can answer them once."""
+    plan = plan_application(form.application_fields, facts, uploaded=uploaded_keys)
+    by_label = {}
+    for f in form.application_fields:
+        by_label.setdefault(f.get('label') or '', f)
+    out = {}
+    for label in plan.skipped:
+        f = by_label.get(label)
+        if label and f and f['type'] != 'file':
+            out[label] = _field_detail(form, f, 'optional field left blank: CareerOps has no answer for it yet')
+    return out
+
+
 def _still_missing(form: _Form, facts: Facts, uploaded_keys: set[str], details: dict | None = None) -> list[str]:
     plan = plan_application(form.application_fields, facts, uploaded=uploaded_keys)
     labels = [u['label'] for u in plan.unresolved]
@@ -489,7 +505,7 @@ def run_generic_browser(
 
     facts = build_facts(profile, extra_links, approved_review_answers, answer_bank, resume_path, cover_letter_path)
     filled: list[str] = []; manual: list[str] = []; uploaded: list[str] = []; uploaded_keys: set[str] = set()
-    details: dict = {}; auto_answers: dict = {}; drafted: set[str] = set()
+    details: dict = {}; auto_answers: dict = {}; drafted: set[str] = set(); optional: dict = {}
     did_submit = False; confirmation_term = None; confirmation_excerpt = None
 
     with sync_playwright() as p:
@@ -526,6 +542,7 @@ def run_generic_browser(
             form = _fill_page(page, facts, filled, uploaded, uploaded_keys)
             if form.captcha:
                 manual.append('CAPTCHA'); break
+            optional.update(_optional_blanks(form, facts, uploaded_keys))
             missing = _still_missing(form, facts, uploaded_keys, details)
             if missing and drafter:
                 # Opted in: write essay answers from the resume/evidence and keep going.
@@ -566,7 +583,10 @@ def run_generic_browser(
                     if [f['label'] for f in after.fields] != [f['label'] for f in form.fields]:
                         continue
                 manual.extend(problems)
-                manual.append('submission confirmation not detected')
+                still_form = after.looks_like_application() and after.find_button(SUBMIT) and \
+                    len(after.application_fields) >= max(1, len(form.application_fields) // 2)
+                # The same form, still filled, no error shown: the site quietly refused the automated submit.
+                manual.append('submission not accepted by the site' if still_form and not problems else 'submission confirmation not detected')
             break
 
         screenshot_path = str(settings.generated_path / f'application_{application.id}_{"confirmation" if did_submit else "review"}.png')
@@ -586,10 +606,35 @@ def run_generic_browser(
         status = 'READY_FOR_SUBMISSION'; msg = 'Application fields and files prepared; final submission not triggered.'
     return BrowserResult(manual_details={k: v for k, v in details.items() if k in manual},
                          auto_answers=auto_answers or None, used_session=bool(storage_state),
+                         optional_blank={k: v for k, v in optional.items() if k not in filled} or None,
                          status=status, url=final_url, filled_fields=sorted(set(filled)), manual_fields=manual,
                          uploaded_files=sorted(set(uploaded)), submitted=did_submit, message=msg,
                          screenshot_path=screenshot_path, confirmation_term=confirmation_term,
                          confirmation_excerpt=confirmation_excerpt)
+
+
+def prefill(page, facts: Facts, max_steps: int = 6) -> dict:
+    """Fill everything CareerOps can for you to check and submit yourself. Never clicks Submit.
+
+    Used by scripts/finish.py in your own browser, for sites that refuse automated submissions.
+    """
+    filled: list[str] = []; uploaded: list[str] = []; keys: set[str] = set(); entered = False
+    for _ in range(max_steps):
+        form = _Form(page)
+        if form.embed and not entered:
+            entered = True
+            page.goto(form.embed, wait_until='domcontentloaded', timeout=45000); _settle(page)
+            continue
+        if not form.looks_like_application():
+            entry = form.find_button(APPLY_ENTRY)
+            if entry:
+                _click(form.frames[entry['frame']], entry['id']); _settle(page, 1200)
+                continue
+            return {'filled': filled, 'missing': ['application form not detected'], 'optional': []}
+        form = _fill_page(page, facts, filled, uploaded, keys)
+        return {'filled': sorted(set(filled)), 'missing': _still_missing(form, facts, keys),
+                'optional': list(_optional_blanks(form, facts, keys))}
+    return {'filled': filled, 'missing': ['application form not detected'], 'optional': []}
 
 
 MOCK_FORM = '''<!doctype html><html><body>

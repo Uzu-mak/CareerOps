@@ -115,6 +115,48 @@
   {% endif %}
 </section>
 
+{% macro review_card(item, uid) %}
+      <div class="review-q {{ 'is-done' if item.resolved }}" data-question="{{ item.question }}" {{ 'data-optional' if item.optional }}>
+        <div class="row between"><h3>{{ item.question }}</h3>{% if item.resolved %}<span class="badge good">Answered</span>{% elif item.optional %}<span class="badge neutral">Optional</span>{% else %}<span class="badge warn">Needs answer</span>{% endif %}</div>
+        <p class="why">{% if item.not_accepted %}{{ item.reason }}{% elif item.field_type and item.input.options and item.input.kind in ('select', 'multi') and item.field_type != 'checkbox' %}{{ job.company }}'s form asks this and CareerOps has no saved answer. Choose from the form's own options.{% elif item.input.profile_fact %}Not on your Profile yet. Answer it here for this job, or <a href="/profile#identity">add your {{ item.input.profile_fact }} to your Profile</a> and every form gets it.{% else %}{{ item.reason }}{% endif %}</p>
+        <div class="form-grid">
+          <div class="field {{ 'full' if item.input.kind in ('textarea',) }}">
+            <label for="ans-{{ uid }}">Answer</label>
+            {% set current = item.answer or item.suggested_answer or '' %}
+            {% if item.input.kind == 'select' and item.input.options | length > 12 %}
+              <input class="input" id="ans-{{ uid }}" name="answer" list="opts-{{ uid }}" value="{{ current }}" placeholder="Type to search {{ item.input.options | length }} options">
+              <datalist id="opts-{{ uid }}">{% for o in item.input.options %}<option value="{{ o }}">{% endfor %}</datalist>
+            {% elif item.input.kind == 'select' %}
+              <select class="select" id="ans-{{ uid }}" name="answer">
+                <option value="">Choose…</option>
+                {% for o in item.input.options %}<option value="{{ o }}" {{ 'selected' if current == o }}>{{ o }}</option>{% endfor %}
+                {% if current and current not in item.input.options %}<option value="{{ current }}" selected>{{ current }}</option>{% endif %}
+              </select>
+            {% elif item.input.kind == 'number' %}
+              <div class="input-group"><span class="addon">$</span><input class="input" id="ans-{{ uid }}" name="answer" type="number" min="0" step="1000" value="{{ current }}"></div>
+            {% elif item.input.kind == 'multi' %}
+              {% set chosen = current.split(' | ') if current else [] %}
+              <div class="card" data-multi style="padding:4px 12px;background:transparent">
+                {% for o in item.input.options %}
+                <label class="switch" style="padding:7px 0"><span class="switch-text"><strong style="font-weight:400">{{ o }}</strong></span>
+                  <input type="checkbox" value="{{ o }}" {{ 'checked' if o in chosen }}><span class="track"></span></label>
+                {% endfor %}
+              </div>
+              <span class="hint">Pick every option that applies — these are the employer's own choices.</span>
+            {% elif item.input.kind == 'textarea' %}
+              <textarea class="textarea" id="ans-{{ uid }}" name="answer" rows="{{ 8 if item.input.words else 4 }}" data-words="{{ item.input.words or '' }}">{{ current }}</textarea>
+              <div class="row between"><span class="hint" data-wordcount>{% if item.input.words %}Aim for about {{ item.input.words }} words.{% endif %}</span>
+                {% if llm_enabled and application %}<button class="btn sm" type="button" data-action="draft-answer" data-app="{{ application.id }}"><svg class="icon"><use href="#i-spark"/></svg>Draft from my resume</button>
+                {% elif application %}<span class="hint">Set <code>LLM_PROVIDER=openai</code> to get a draft from your resume.</span>{% endif %}</div>
+            {% else %}
+              <input class="input" id="ans-{{ uid }}" name="answer" value="{{ current }}">
+            {% endif %}
+          </div>
+          <div class="field {{ 'full' if item.input.kind == 'textarea' }}"><label for="note-{{ uid }}">Note to self <span class="soft">(optional)</span></label><input class="input" id="note-{{ uid }}" name="notes" value="{{ item.notes or '' }}"></div>
+        </div>
+        <div class="actions" style="margin-top:12px"><button class="btn sm primary" type="button" data-action="save-review" data-app="{{ application.id }}"><svg class="icon"><use href="#i-check"/></svg>Save answer</button></div>
+      </div>
+{% endmacro %}
 <section id="review" role="tabpanel" hidden>
   {% if blockers %}
   <div class="card warn" style="margin-bottom:18px">
@@ -127,6 +169,10 @@
           {% if item.resolved %}<span class="badge neutral">Dismissed</span>{% else %}<span class="badge warn">Action</span>{% endif %}</div>
         <p class="why">{{ item.blocker.why }}</p>
         <div class="callout" style="margin-bottom:12px"><svg class="icon"><use href="#i-arrow-right"/></svg><div><strong>What to do:</strong> {{ item.blocker.action }}</div></div>
+        {% if item.question.startswith('submission not accepted') or item.question.startswith('CAPTCHA') %}
+        <p class="hint" style="margin:0 0 6px">In a terminal in your CareerOps folder:</p>
+        <span class="row" style="margin:0 0 12px"><code class="pre" style="padding:6px 10px;max-height:none;flex:1" id="finish-{{ loop.index }}">finish.bat {{ job.id }}</code><button class="btn sm" type="button" data-action="copy" data-target="finish-{{ loop.index }}">Copy</button></span>
+        {% endif %}
         <div class="actions">
           {% if apply_url %}<a class="btn sm" href="{{ apply_url }}" target="_blank" rel="noopener">Open employer page<svg class="icon"><use href="#i-external"/></svg></a>{% endif %}
           {% if application %}<button class="btn sm ghost" type="button" data-action="dismiss-blocker" data-app="{{ application.id }}">Dismiss</button>{% endif %}
@@ -141,46 +187,7 @@
       <p>Answers here are saved for this application. Non-sensitive ones (like “How did you hear about us?”) are reused on future applications automatically.</p></div></div>
     <div class="card-body flush">
       {% for item in review_items %}
-      <div class="review-q {{ 'is-done' if item.resolved }}" data-question="{{ item.question }}">
-        <div class="row between"><h3>{{ item.question }}</h3>{% if item.resolved %}<span class="badge good">Answered</span>{% else %}<span class="badge warn">Needs answer</span>{% endif %}</div>
-        <p class="why">{% if item.not_accepted %}{{ item.reason }}{% elif item.field_type and item.input.options and item.input.kind in ('select', 'multi') and item.field_type != 'checkbox' %}{{ job.company }}'s form asks this and CareerOps has no saved answer. Choose from the form's own options.{% elif item.input.profile_fact %}Not on your Profile yet. Answer it here for this job, or <a href="/profile#identity">add your {{ item.input.profile_fact }} to your Profile</a> and every form gets it.{% else %}{{ item.reason }}{% endif %}</p>
-        <div class="form-grid">
-          <div class="field {{ 'full' if item.input.kind in ('textarea',) }}">
-            <label for="ans-{{ loop.index }}">Answer</label>
-            {% set current = item.answer or item.suggested_answer or '' %}
-            {% if item.input.kind == 'select' and item.input.options | length > 12 %}
-              <input class="input" id="ans-{{ loop.index }}" name="answer" list="opts-{{ loop.index }}" value="{{ current }}" placeholder="Type to search {{ item.input.options | length }} options">
-              <datalist id="opts-{{ loop.index }}">{% for o in item.input.options %}<option value="{{ o }}">{% endfor %}</datalist>
-            {% elif item.input.kind == 'select' %}
-              <select class="select" id="ans-{{ loop.index }}" name="answer">
-                <option value="">Choose…</option>
-                {% for o in item.input.options %}<option value="{{ o }}" {{ 'selected' if current == o }}>{{ o }}</option>{% endfor %}
-                {% if current and current not in item.input.options %}<option value="{{ current }}" selected>{{ current }}</option>{% endif %}
-              </select>
-            {% elif item.input.kind == 'number' %}
-              <div class="input-group"><span class="addon">$</span><input class="input" id="ans-{{ loop.index }}" name="answer" type="number" min="0" step="1000" value="{{ current }}"></div>
-            {% elif item.input.kind == 'multi' %}
-              {% set chosen = current.split(' | ') if current else [] %}
-              <div class="card" data-multi style="padding:4px 12px;background:transparent">
-                {% for o in item.input.options %}
-                <label class="switch" style="padding:7px 0"><span class="switch-text"><strong style="font-weight:400">{{ o }}</strong></span>
-                  <input type="checkbox" value="{{ o }}" {{ 'checked' if o in chosen }}><span class="track"></span></label>
-                {% endfor %}
-              </div>
-              <span class="hint">Pick every option that applies — these are the employer's own choices.</span>
-            {% elif item.input.kind == 'textarea' %}
-              <textarea class="textarea" id="ans-{{ loop.index }}" name="answer" rows="{{ 8 if item.input.words else 4 }}" data-words="{{ item.input.words or '' }}">{{ current }}</textarea>
-              <div class="row between"><span class="hint" data-wordcount>{% if item.input.words %}Aim for about {{ item.input.words }} words.{% endif %}</span>
-                {% if llm_enabled and application %}<button class="btn sm" type="button" data-action="draft-answer" data-app="{{ application.id }}"><svg class="icon"><use href="#i-spark"/></svg>Draft from my resume</button>
-                {% elif application %}<span class="hint">Set <code>LLM_PROVIDER=openai</code> to get a draft from your resume.</span>{% endif %}</div>
-            {% else %}
-              <input class="input" id="ans-{{ loop.index }}" name="answer" value="{{ current }}">
-            {% endif %}
-          </div>
-          <div class="field {{ 'full' if item.input.kind == 'textarea' }}"><label for="note-{{ loop.index }}">Note to self <span class="soft">(optional)</span></label><input class="input" id="note-{{ loop.index }}" name="notes" value="{{ item.notes or '' }}"></div>
-        </div>
-        <div class="actions" style="margin-top:12px"><button class="btn sm primary" type="button" data-action="save-review" data-app="{{ application.id }}"><svg class="icon"><use href="#i-check"/></svg>Save answer</button></div>
-      </div>
+      {{ review_card(item, loop.index) }}
       {% else %}
         <div class="empty"><svg class="icon"><use href="#i-check"/></svg><strong>No questions to answer</strong><span>{% if application %}Nothing on this form is waiting for your answer.{% else %}Run a dry run to see which questions this form asks.{% endif %}</span></div>
       {% endfor %}
@@ -190,6 +197,15 @@
       <div class="actions"><button class="btn sm" type="button" data-action="dry-run" data-id="{{ job.id }}">Dry run again</button><button class="btn sm primary" type="button" data-action="apply" data-id="{{ job.id }}">Apply</button></div></div>
     {% endif %}
   </div>
+  {% if optional_items %}
+  <details class="card" style="margin-top:18px" {{ 'open' if not review_items }}>
+    <summary class="card-head" style="cursor:pointer"><div><div class="eyebrow">Optional · left blank</div><h2>{{ optional_items | length }} optional field(s) CareerOps had no answer for</h2>
+      <p>Not required, so the run didn't stop for them. Answer any you want sent; answers are filled on the next run (and reused on other applications when they aren't sensitive).</p></div></summary>
+    <div class="card-body flush">
+      {% for item in optional_items %}{{ review_card(item, 'opt' ~ loop.index) }}{% endfor %}
+    </div>
+  </details>
+  {% endif %}
 </section>
 
 <section id="documents" role="tabpanel" hidden>

@@ -236,6 +236,34 @@ def apply_live(job_id:int, submit:bool=Query(True), db:Session=Depends(get_db)):
     return {'application_id':app.id,'verification':submission_evidence_summary(app),**result.__dict__}
 
 
+@router.get('/jobs/{job_id}/fill-kit')
+def fill_kit(job_id:int, db:Session=Depends(get_db)):
+    """Everything scripts/finish.py needs to fill this application in your own browser."""
+    import base64, json as _json
+    j=db.get(JobPosting,job_id); p=db.scalar(select(CandidateProfile).limit(1))
+    if not j or not p: raise HTTPException(404,'Missing job/profile')
+    target=j.application_url or j.canonical_url
+    if not target: raise HTTPException(409,'This job does not have an application URL.')
+    def latest(kind):
+        return db.scalar(select(GeneratedArtifact).where(GeneratedArtifact.job_id==job_id,GeneratedArtifact.artifact_type==kind,GeneratedArtifact.file_path.is_not(None))
+                         .order_by(GeneratedArtifact.created_at.desc()).limit(1))
+    resume,letter=latest('resume'),latest('cover_letter')
+    if not resume or not Path(resume.file_path).exists():
+        package=prepare_application(db,j); resume,letter=package['resume'],package['cover_letter']
+    app=db.scalar(select(Application).where(Application.job_id==job_id).order_by(Application.created_at.desc()).limit(1))
+    def file(art):
+        if not art or not art.file_path or not Path(art.file_path).exists(): return None
+        return {'name':Path(art.file_path).name,'data':base64.b64encode(Path(art.file_path).read_bytes()).decode()}
+    profile={c.name:(getattr(p,c.name).isoformat() if hasattr(getattr(p,c.name),'isoformat') else getattr(p,c.name)) for c in CandidateProfile.__table__.columns}
+    saved=session_for(db,target)
+    state=None
+    if saved and saved.session_state_uri and Path(saved.session_state_uri).exists():
+        state=_json.loads(Path(saved.session_state_uri).read_text(encoding='utf-8'))
+    return {'job_id':job_id,'company':j.company,'title':j.title,'url':target,'profile':profile,'links':application_links(db,p.id),
+            'approved':approved_answers(db,app) if app else {},'bank':answer_bank(db,exclude_application_id=app.id if app else None),
+            'resume':file(resume),'cover_letter':file(letter),'storage_state':state}
+
+
 @router.post('/jobs/{job_id}/simulate-apply')
 def simulate_apply(job_id:int, db:Session=Depends(get_db)):
     j=db.get(JobPosting,job_id); p=db.scalar(select(CandidateProfile).limit(1))
