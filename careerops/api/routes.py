@@ -30,6 +30,8 @@ from careerops.services.career_memory import parse_metric_lines, evidence_from_j
 from careerops.services.notifications import get_notification_preferences, emit_notification, notify_application_event
 from careerops.services.alert_inbox import store_alert_email, process_pending_alerts
 from careerops.services.imap_alerts import poll_imap_alerts, imap_configured
+from careerops.services.portal_sessions import delete_session, note_expired_session, save_session, session_for, site_key
+from careerops.services.answer_drafts import make_drafter
 from careerops.services.job_search import job_facets, pending_analysis_count, pending_analysis_ids, search_jobs
 from careerops.core.ui_options import APPLICATION_STATUS_VALUES, SCAN_INTERVALS, SOURCE_TYPES, detect_skills, suggest_roles
 
@@ -49,9 +51,11 @@ def get_profile(db:Session=Depends(get_db)):
 def update_profile(payload:ProfileUpdate, db:Session=Depends(get_db)):
     p=db.scalar(select(CandidateProfile).limit(1))
     if not p: p=CandidateProfile(full_name=payload.full_name); db.add(p)
-    data=payload.model_dump()
+    # Only fields the client sent are changed, so saving one section never blanks another
+    # (e.g. saving search preferences must not erase verified work-authorization answers).
+    data=payload.model_dump(exclude_unset=True)
     legal_keys={'authorized_to_work_us','requires_current_sponsorship','requires_future_sponsorship','work_authorization_type','work_authorization_expiration'}
-    legal_touched=any(data.get(k) is not None for k in legal_keys)
+    legal_touched=any(k in data for k in legal_keys)
     for k,v in data.items(): setattr(p,k,v)
     if legal_touched: p.legal_answers_verified_at=datetime.now(timezone.utc)
     db.commit(); db.refresh(p)
@@ -219,7 +223,10 @@ def apply_live(job_id:int, submit:bool=Query(True), db:Session=Depends(get_db)):
         extra_links=application_links(db,p.id)
         approved=approved_answers(db,app)
         bank=answer_bank(db,exclude_application_id=app.id)
-        result=run_generic_browser(p,j,app,target,resume_path=package['resume'].file_path,cover_letter_path=package['cover_letter'].file_path,submit=submit,extra_links=extra_links,approved_review_answers=approved,answer_bank=bank)
+        saved=session_for(db,target)
+        result=run_generic_browser(p,j,app,target,resume_path=package['resume'].file_path,cover_letter_path=package['cover_letter'].file_path,submit=submit,extra_links=extra_links,approved_review_answers=approved,answer_bank=bank,
+                                   storage_state=saved.session_state_uri if saved else None,drafter=make_drafter(db,j,p))
+        note_expired_session(db,saved,result)
         run.output_summary=f"{len(result.filled_fields)} fields; {len(result.uploaded_files)} files; {result.status}"
     record_browser_result(db, app, result)
     if result.submitted:
@@ -303,13 +310,14 @@ def runtime_settings(db:Session=Depends(get_db)):
     return {'auto_apply_enabled':x.auto_apply_enabled,'auto_apply_min_fit':x.auto_apply_min_fit,'max_auto_applications_per_day':x.max_auto_applications_per_day}
 
 @router.put('/runtime-settings')
-def update_runtime_settings(auto_apply_enabled:bool=Form(...), auto_apply_min_fit:int=Form(90), max_auto_applications_per_day:int=Form(5), db:Session=Depends(get_db)):
+def update_runtime_settings(auto_apply_enabled:bool=Form(...), auto_apply_min_fit:int=Form(90), max_auto_applications_per_day:int=Form(5), auto_draft_essays:bool=Form(False), db:Session=Depends(get_db)):
     x=get_runtime_settings(db)
     x.auto_apply_enabled=auto_apply_enabled
+    x.auto_draft_essays=auto_draft_essays
     x.auto_apply_min_fit=max(0,min(100,auto_apply_min_fit))
     x.max_auto_applications_per_day=max(1,min(100,max_auto_applications_per_day))
     db.add(x); db.commit(); db.refresh(x)
-    return {'ok':True,'auto_apply_enabled':x.auto_apply_enabled,'auto_apply_min_fit':x.auto_apply_min_fit,'max_auto_applications_per_day':x.max_auto_applications_per_day}
+    return {'ok':True,'auto_apply_enabled':x.auto_apply_enabled,'auto_apply_min_fit':x.auto_apply_min_fit,'max_auto_applications_per_day':x.max_auto_applications_per_day,'auto_draft_essays':x.auto_draft_essays}
 
 @router.patch('/applications/{application_id}/status')
 def update_application_status(application_id:int, status:str=Query(...), db:Session=Depends(get_db)):
@@ -457,6 +465,27 @@ def draft_review_answer(application_id:int, question:str=Form(...), db:Session=D
         return draft_answer(llm, question, job, p, rank_evidence(db,p,job,limit=6))
     except (LLMUnavailable, ValueError) as exc:
         raise HTTPException(502,f'Could not draft an answer: {exc}')
+
+@router.post('/portal-sessions')
+def upload_portal_session(payload:dict, db:Session=Depends(get_db)):
+    """Store a sign-in session captured by scripts/signin.py: {"url": ..., "storage_state": {...}}."""
+    try:
+        return {'ok':True,**save_session(db,str(payload.get('url') or ''),payload.get('storage_state'))}
+    except ValueError as exc:
+        raise HTTPException(400,str(exc))
+
+@router.get('/portal-sessions')
+def list_portal_sessions(db:Session=Depends(get_db)):
+    from careerops.db.models import PortalAccount
+    rows=db.scalars(select(PortalAccount).where(PortalAccount.provider=='session').order_by(PortalAccount.company)).all()
+    return [{'id':r.id,'site':r.company,'status':r.status,'saved_at':r.last_authenticated_at,'notes':r.notes} for r in rows]
+
+@router.delete('/portal-sessions/{session_id}')
+def remove_portal_session(session_id:int, db:Session=Depends(get_db)):
+    from careerops.db.models import PortalAccount
+    row=db.get(PortalAccount,session_id)
+    if not row or row.provider!='session': raise HTTPException(404,'Session not found')
+    delete_session(db,row); return {'ok':True}
 
 @router.delete('/sources/{source_id}')
 def delete_source(source_id:int, db:Session=Depends(get_db)):

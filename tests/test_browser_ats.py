@@ -188,3 +188,52 @@ def test_lever_and_ashby_links_open_the_application_form():
     assert browser.application_entry_url(ashby) == 'https://jobs.ashbyhq.com/initech/0f8c2b0e-4c55-4c41-9f0a-1d2e3f4a5b6c/application?src=li'
     assert browser.application_entry_url(lever + '/apply') == lever + '/apply'
     assert browser.application_entry_url('https://boards.greenhouse.io/x/jobs/1') == 'https://boards.greenhouse.io/x/jobs/1'
+
+
+def _education(**overrides):
+    return _profile(education_school='University of Washington', education_degree="Bachelor's", education_field='Computer Science',
+                    education_graduation_year=2026, education_graduation_month=6, education_gpa=None,
+                    high_school_name='Accra Academy', high_school_graduation_year=2019, **overrides)
+
+
+def test_sign_in_wall_without_a_session_pauses(monkeypatch, tmp_path):
+    result = _run(monkeypatch, tmp_path, 'portal/apply.html', profile=_education())
+    assert not result.submitted
+    assert result.manual_fields == ['portal account password / email verification']
+
+
+def test_saved_session_gets_past_the_wall_and_education_is_filled(monkeypatch, tmp_path):
+    import json
+    state = tmp_path / 'session.json'
+    state.write_text(json.dumps({'cookies': [{'name': 'portal_session', 'value': 'valid', 'domain': '127.0.0.1', 'path': '/',
+                                              'expires': -1, 'httpOnly': False, 'secure': False, 'sameSite': 'Lax'}], 'origins': []}))
+    result = _run(monkeypatch, tmp_path, 'portal/apply.html', profile=_education(), storage_state=str(state))
+
+    assert result.submitted, result.manual_fields
+    assert result.used_session
+    sent = _query(result.url)
+    assert sent['school'] == 'Other (School Not Listed)'      # UW isn't listed, so the form's "Other"
+    assert sent['grad'] == '2026'
+
+
+def test_essays_are_written_mid_run_when_auto_answer_is_on(monkeypatch, tmp_path):
+    asked = []
+
+    def drafter(question):
+        asked.append(question)
+        return 'I made a browser agent fill real application forms reliably, tested against replicas of each portal.'
+
+    answers = {'Language Skill(s) (Check all that apply)': 'English'}           # the essay is NOT pre-answered
+    result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK, approved_review_answers=answers, drafter=drafter)
+
+    assert result.submitted, result.manual_fields
+    assert asked == ["What is the hardest technical challenge you've faced? (Approx. 200 words)"]
+    assert list(result.auto_answers) == asked
+    assert _query(result.url)['cards[0][field5]'].startswith('I made a browser agent')
+
+
+def test_drafter_that_declines_still_pauses(monkeypatch, tmp_path):
+    answers = {'Language Skill(s) (Check all that apply)': 'English'}
+    result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK, approved_review_answers=answers, drafter=lambda q: None)
+    assert not result.submitted
+    assert result.manual_fields == ["What is the hardest technical challenge you've faced? (Approx. 200 words)"]

@@ -40,6 +40,7 @@
         <a href="#resume"><svg class="icon"><use href="#i-file"/></svg>Master resume</a>
         <a href="#identity"><svg class="icon"><use href="#i-user"/></svg>Identity &amp; contact</a>
         <a href="#search"><svg class="icon"><use href="#i-search"/></svg>Search preferences</a>
+        <a href="#education"><svg class="icon"><use href="#i-book"/></svg>Education</a>
         <a href="#legal"><svg class="icon"><use href="#i-shield"/></svg>Work authorization</a>
         <a href="#links"><svg class="icon"><use href="#i-link"/></svg>Links</a>
       </div>
@@ -112,6 +113,34 @@
       </div>
       <div class="card-foot"><span class="soft">Changes apply to the next analysis.</span><button class="btn primary" type="submit">Save preferences</button></div>
     </form>
+
+    <!-- Education -->
+    <form class="card" id="education" data-form="profile-education">
+      <div class="card-head"><div><div class="eyebrow">Education</div><h2>So forms stop asking for your school and graduation year</h2>
+        <p>Filled into university, degree, major, graduation-year, GPA and high-school questions. If your school isn't in a form's list, CareerOps picks its “Other” option.</p></div></div>
+      <div class="card-body form-grid">
+        <div class="field full"><label for="ed-school">University or college</label><input class="input" id="ed-school" name="education_school" value="{{ profile.education_school or '' }}" placeholder="University of Washington"></div>
+        <div class="field"><label for="ed-degree">Degree</label>
+          <select class="select" id="ed-degree" name="education_degree"><option value="">Choose…</option>
+            {% for d in ui.degrees %}<option {{ 'selected' if profile.education_degree == d }}>{{ d }}</option>{% endfor %}
+            {% if profile.education_degree and profile.education_degree not in ui.degrees %}<option selected>{{ profile.education_degree }}</option>{% endif %}</select></div>
+        <div class="field"><label for="ed-field">Major / field of study</label><input class="input" id="ed-field" name="education_field" value="{{ profile.education_field or '' }}" placeholder="Computer Science" list="majorOptions"></div>
+        <div class="field"><label for="ed-month">Graduation month</label>
+          <select class="select" id="ed-month" name="education_graduation_month"><option value="">—</option>
+            {% for m in ['January','February','March','April','May','June','July','August','September','October','November','December'] %}<option value="{{ loop.index }}" {{ 'selected' if profile.education_graduation_month == loop.index }}>{{ m }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="ed-year">Graduation year <span class="soft">(expected is fine)</span></label>
+          <select class="select" id="ed-year" name="education_graduation_year"><option value="">—</option>
+            {% for y in ui.graduation_years %}<option value="{{ y }}" {{ 'selected' if profile.education_graduation_year == y }}>{{ y }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="ed-gpa">GPA <span class="soft">(optional)</span></label><input class="input" id="ed-gpa" name="education_gpa" value="{{ profile.education_gpa or '' }}" placeholder="3.6" inputmode="decimal" pattern="[0-9](\.[0-9]{1,2})?(/[0-9](\.[0-9])?)?"></div>
+        <div class="field"></div>
+        <div class="field"><label for="ed-hs">High school</label><input class="input" id="ed-hs" name="high_school_name" value="{{ profile.high_school_name or '' }}"></div>
+        <div class="field"><label for="ed-hs-year">High school graduation year</label>
+          <select class="select" id="ed-hs-year" name="high_school_graduation_year"><option value="">—</option>
+            {% for y in ui.graduation_years if y <= 2030 %}<option value="{{ y }}" {{ 'selected' if profile.high_school_graduation_year == y }}>{{ y }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="card-foot"><span class="soft">Used on every application.</span><button class="btn primary" type="submit">Save education</button></div>
+    </form>
+    <datalist id="majorOptions">{% for m in ['Computer Science','Computer Engineering','Software Engineering','Data Science','Information Systems','Electrical Engineering','Mathematics','Statistics','Mechanical Engineering','Industrial Engineering','Physics','Business Analytics'] %}<option value="{{ m }}">{% endfor %}</datalist>
 
     <!-- Legal -->
     <form class="card {{ '' if profile.legal_answers_verified_at else 'warn' }}" id="legal" data-form="profile-legal">

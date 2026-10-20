@@ -90,6 +90,19 @@ MOTIVATION = r"\b(why|what (interests|excites|attracts|draws) you|interest(ed)? 
 NO_BANK = {'eeo', 'identity', 'criminal', 'attestation', 'citizenship', 'clearance', 'salary', 'work_auth',
            'sponsorship', 'motivation', 'timing'}
 
+# Education questions are often long ("Which university are you currently attending...?"),
+# so they are matched without the short-label rule used for contact fields. Order matters.
+EDUCATION_RULES: list[tuple[str, str]] = [
+    ('hs_year', r'\bhigh school\b.*\b(year|graduat\w*)\b|\b(year|graduat\w*)\b.*\bhigh school\b'),
+    ('high_school', r'\bhigh school\b'),
+    ('grad_year', r'\b(graduation (year|date)|year of graduation|graduat\w* (year|date|in)|expected graduation|intended graduation|when (did|do|will) you graduate)\b'),
+    ('gpa', r'\bgpa\b|\bgrade point\b'),
+    ('major', r'\b(major|field of study|area of study|discipline|concentration)\b'),
+    ('degree', r'\b(degree|highest (level of )?education|education level|level of education)\b'),
+    ('school', r'\b(university|college|school|institution)\b'),
+]
+EDUCATION = {name for name, _ in EDUCATION_RULES}
+
 PROFILE_RULES: list[tuple[str, str]] = [
     ('preferred_name', r'\b(preferred (first )?name|nickname|goes by)\b'),
     ('first_name', r'\b(first|given) ?name\b|^first$'),
@@ -114,6 +127,10 @@ def classify(label: str) -> str:
     for cat, pattern in SENSITIVE.items():
         if _has(pattern, low):
             return cat
+    if not re.match(r'^(are|do|did|have|has|would|will|can|is)\b', low):
+        for name, pattern in EDUCATION_RULES:
+            if _has(pattern, low):
+                return name
     if len(low) <= 80 and not re.match(r'^(are|do|did|have|has|would|will|can|is)\b', low):
         for name, pattern in PROFILE_RULES:
             if _has(pattern, low):
@@ -146,6 +163,13 @@ class Facts:
     sponsor_now: bool | None = None
     sponsor_future: bool | None = None
     eeo_decline: bool = False
+    school: str | None = None
+    degree: str | None = None
+    major: str | None = None
+    grad_year: str | None = None
+    gpa: str | None = None
+    high_school: str | None = None
+    hs_year: str | None = None
     approved: dict[str, str] = field(default_factory=dict)
     bank: dict[str, str] = field(default_factory=dict)
     resume_path: str | None = None
@@ -177,6 +201,11 @@ def build_facts(profile, extra_links=None, approved_answers=None, answer_bank=No
         sponsor_now=getattr(profile, 'requires_current_sponsorship', None) if verified else None,
         sponsor_future=getattr(profile, 'requires_future_sponsorship', None) if verified else None,
         eeo_decline=(getattr(profile, 'eeo_preference', None) or '').lower() == 'decline',
+        school=getattr(profile, 'education_school', None), degree=getattr(profile, 'education_degree', None),
+        major=getattr(profile, 'education_field', None),
+        grad_year=str(getattr(profile, 'education_graduation_year', None) or '') or None,
+        gpa=getattr(profile, 'education_gpa', None), high_school=getattr(profile, 'high_school_name', None),
+        hs_year=str(getattr(profile, 'high_school_graduation_year', None) or '') or None,
         approved={str(k): str(v) for k, v in (approved_answers or {}).items() if v is not None and str(v).strip()},
         bank={str(k): str(v) for k, v in (answer_bank or {}).items() if v is not None and str(v).strip()},
         resume_path=resume_path,
@@ -241,6 +270,8 @@ def answer_for(field_: dict, facts: Facts) -> tuple[Answer | None, str]:
         'preferred_name': facts.preferred_name, 'email': facts.email, 'phone': facts.phone,
         'linkedin': facts.linkedin, 'github': facts.github, 'portfolio': facts.portfolio,
         'location': facts.location,
+        'school': facts.school, 'degree': facts.degree, 'major': facts.major, 'grad_year': facts.grad_year,
+        'gpa': facts.gpa, 'high_school': facts.high_school, 'hs_year': facts.hs_year,
     }
     if cat in profile_value:
         value = profile_value[cat]
@@ -401,6 +432,9 @@ def plan_application(fields: list[dict], facts: Facts, uploaded: set[str] | None
             continue
         if ftype in {'select', 'radio', 'buttons', 'checkbox_group'}:
             idx = choose_option([o.get('text', '') for o in options], answer)
+            if idx is None and cat in {'school', 'high_school'}:
+                # "Please select Other (School Not Listed) if your school is not listed."
+                idx = next((i for i, o in enumerate(options) if re.search(r'\bother\b', o.get('text', ''), re.I)), None)
             if idx is None:
                 if f.get('required') and not filled:
                     plan.unresolved.append({'label': label, 'category': cat,

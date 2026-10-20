@@ -48,6 +48,15 @@ def _ensure_schema_compatibility():
         "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS eeo_preference VARCHAR(20)",
         "ALTER TABLE job_postings ALTER COLUMN location TYPE TEXT",
         "ALTER TABLE source_configs ADD COLUMN IF NOT EXISTS discovered_from VARCHAR(80)",
+        "ALTER TABLE runtime_settings ADD COLUMN IF NOT EXISTS auto_draft_essays BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_school VARCHAR(220)",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_degree VARCHAR(80)",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(160)",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_graduation_year INTEGER",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_graduation_month INTEGER",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS education_gpa VARCHAR(12)",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS high_school_name VARCHAR(220)",
+        "ALTER TABLE candidate_profiles ADD COLUMN IF NOT EXISTS high_school_graduation_year INTEGER",
         "ALTER TABLE job_postings ALTER COLUMN source_job_id TYPE TEXT",
     ]
     with engine.begin() as conn:

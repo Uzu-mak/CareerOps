@@ -43,6 +43,17 @@ def record_browser_result(db: Session, app: Application, result) -> Application:
     }
     answers = dict(app.answers or {})
     answers['_submission_evidence'] = evidence
+    if getattr(result, 'auto_answers', None):
+        from sqlalchemy import select
+        from careerops.db.models import ApplicationReviewAnswer
+        for question, text in result.auto_answers.items():
+            row = db.scalar(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id == app.id,
+                                                                  ApplicationReviewAnswer.question == question))
+            if row is None:
+                row = ApplicationReviewAnswer(application_id=app.id, question=question)
+                db.add(row)
+            row.answer, row.resolved, row.category = text, True, 'auto_draft'
+            row.notes = 'Written by CareerOps from your resume and evidence (auto-answer essays is on)'
     for label, detail in (getattr(result, 'manual_details', None) or {}).items():
         plan = dict(answers.get(label) or {})
         plan.update({'mode': plan.get('mode', 'REVIEW'), 'reason': detail.get('reason') or plan.get('reason'),

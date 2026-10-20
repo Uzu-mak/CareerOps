@@ -55,6 +55,7 @@ def setup_checklist(profile, link_count: int = 0, notifications_configured: bool
         ('resume', 'Upload your master resume', bool(getattr(profile, 'baseline_resume_path', None)), '/profile#resume'),
         ('legal', 'Verify work-authorization answers', getattr(profile, 'legal_answers_verified_at', None) is not None, '/profile#legal'),
         ('skills', 'Add at least 5 skills', len(getattr(profile, 'skills', None) or []) >= 5, '/profile#search'),
+        ('education', 'Add your education', bool(getattr(profile, 'education_school', None) and getattr(profile, 'education_graduation_year', None)), '/profile#education'),
         ('roles', 'Choose target role families', bool(getattr(profile, 'role_families', None)), '/profile#search'),
         ('links', 'Add LinkedIn and GitHub', bool(getattr(profile, 'linkedin_url', None) and getattr(profile, 'github_url', None))
          and 'your-name' not in (getattr(profile, 'linkedin_url', '') or ''), '/profile#identity'),

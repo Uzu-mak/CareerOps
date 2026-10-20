@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from careerops.core.config import settings
 from careerops.db.init import create_all, seed_demo_data
 from careerops.db.session import get_db
-from careerops.db.models import CandidateProfile, JobPosting, JobAnalysis, Application, AgentRun, GeneratedArtifact, SourceConfig, ProfileLink, CareerJournalEntry, ApplicationReviewAnswer, NotificationPreference, NotificationEvent, AlertInboxMessage, DiscoveryRun
+from careerops.db.models import CandidateProfile, JobPosting, JobAnalysis, Application, AgentRun, GeneratedArtifact, SourceConfig, ProfileLink, CareerJournalEntry, ApplicationReviewAnswer, NotificationPreference, NotificationEvent, AlertInboxMessage, DiscoveryRun, PortalAccount
 from careerops.agents.orchestrator import latest_analysis
 from careerops.agents.reporting import dashboard_metrics, build_daily_report
 from careerops.api.routes import router as api_router
@@ -20,6 +20,7 @@ from careerops.agents.account import account_plan
 from careerops.services.notifications import get_notification_preferences
 from careerops.services.imap_alerts import imap_configured
 from careerops.services.job_search import job_facets, pending_analysis_count
+from careerops.services.portal_sessions import session_for
 from careerops.core.ui_options import apply_mode, as_template_globals, blocker_info, detect_skills, review_input, suggest_roles
 from careerops.web.view_helpers import iso, money, salary_range, setup_checklist, short_dt
 
@@ -124,7 +125,13 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
         latest.setdefault(a.artifact_type, a)
     older_artifacts=len(artifacts)-len(latest)
     artifacts=list(latest.values())
-    return _render(request, db, 'job.html', profile=profile, job=job, llm_enabled=(settings.llm_provider or 'local').lower()!='local', apply_mode=apply_mode(job.application_url or job.canonical_url, job.ats), analysis=analysis, application=app_row, artifacts=artifacts,
+    target=job.application_url or job.canonical_url
+    mode=apply_mode(target, job.ats)
+    saved=session_for(db, target) if mode=='manual' else None
+    if saved: mode='session'
+    auto_answers=db.scalars(select(ApplicationReviewAnswer).where(ApplicationReviewAnswer.application_id==app_row.id, ApplicationReviewAnswer.category=='auto_draft')).all() if app_row else []
+    return _render(request, db, 'job.html', profile=profile, job=job, llm_enabled=(settings.llm_provider or 'local').lower()!='local', apply_mode=mode,
+                   session_site=saved.company if saved else None, auto_answers=auto_answers, analysis=analysis, application=app_row, artifacts=artifacts,
                    runs=runs, review_items=review_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
                    verification=submission_evidence_summary(app_row) if app_row else None)
 
@@ -173,7 +180,8 @@ def sources_page(request:Request, db:Session=Depends(get_db)):
     providers={'adzuna':bool(settings.adzuna_app_id and settings.adzuna_app_key),
                'usajobs':bool(settings.usajobs_api_key and settings.usajobs_user_agent),
                'imap':imap_configured(), 'llm':(settings.llm_provider or 'local').lower()!='local'}
-    return _render(request, db, 'sources.html', sources=sources, runtime=get_runtime_settings(db), runs=runs, providers=providers,
+    sessions=db.scalars(select(PortalAccount).where(PortalAccount.provider=='session').order_by(PortalAccount.company)).all()
+    return _render(request, db, 'sources.html', sessions=sessions, sources=sources, runtime=get_runtime_settings(db), runs=runs, providers=providers,
                    llm_provider=(settings.llm_provider or 'local').lower(), pending=pending_analysis_count(db))
 
 

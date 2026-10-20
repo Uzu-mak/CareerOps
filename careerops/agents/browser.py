@@ -81,6 +81,9 @@ class BrowserResult:
     # For each question it could not answer: the field type and the form's own options,
     # so the review queue can offer exactly those choices.
     manual_details: dict | None = None
+    # Essay answers CareerOps wrote during the run (auto-draft setting), so you can see what was sent.
+    auto_answers: dict | None = None
+    used_session: bool = False
 
 
 def detect_portal(url: str | None) -> str:
@@ -469,8 +472,13 @@ def run_generic_browser(
     extra_links: list[dict] | None = None,
     approved_review_answers: dict[str, str] | None = None,
     answer_bank: dict[str, str] | None = None,
+    storage_state: str | None = None,
+    drafter=None,
 ) -> BrowserResult:
     """Fill a live application using verified profile facts and the tailored files.
+
+    ``storage_state`` is a saved sign-in session for the site (see services/portal_sessions).
+    ``drafter(question) -> str | None`` answers essay questions mid-run when the user opted in.
 
     Submission is reported only when an employer acknowledgement appears after
     the final submit click; otherwise the exact blocking questions are returned
@@ -481,12 +489,14 @@ def run_generic_browser(
 
     facts = build_facts(profile, extra_links, approved_review_answers, answer_bank, resume_path, cover_letter_path)
     filled: list[str] = []; manual: list[str] = []; uploaded: list[str] = []; uploaded_keys: set[str] = set()
-    details: dict = {}
+    details: dict = {}; auto_answers: dict = {}; drafted: set[str] = set()
     did_submit = False; confirmation_term = None; confirmation_excerpt = None
 
     with sync_playwright() as p:
         browser = p.chromium.launch(**_launch_options(settings, settings.browser_headless))
-        page = browser.new_page(viewport={'width': 1280, 'height': 900})
+        context = browser.new_context(viewport={'width': 1280, 'height': 900},
+                                      **({'storage_state': storage_state} if storage_state else {}))
+        page = context.new_page()
         page.goto(application_entry_url(target_url), wait_until='domcontentloaded', timeout=45000)
         _settle(page)
         entered_embed = False
@@ -517,6 +527,20 @@ def run_generic_browser(
             if form.captcha:
                 manual.append('CAPTCHA'); break
             missing = _still_missing(form, facts, uploaded_keys, details)
+            if missing and drafter:
+                # Opted in: write essay answers from the resume/evidence and keep going.
+                wrote = 0
+                for label in missing:
+                    is_essay = (details.get(label) or {}).get('type') == 'textarea' or classify(label) == 'motivation' \
+                        or re.search(r'\d{2,4}\s*words', label, re.I)
+                    if label in drafted or not is_essay:
+                        continue
+                    drafted.add(label)
+                    text = drafter(label)
+                    if text:
+                        facts.approved[label] = text; auto_answers[label] = text; wrote += 1
+                if wrote:
+                    continue
             if missing:
                 manual.extend(missing); break
             if not submit:
@@ -561,6 +585,7 @@ def run_generic_browser(
     else:
         status = 'READY_FOR_SUBMISSION'; msg = 'Application fields and files prepared; final submission not triggered.'
     return BrowserResult(manual_details={k: v for k, v in details.items() if k in manual},
+                         auto_answers=auto_answers or None, used_session=bool(storage_state),
                          status=status, url=final_url, filled_fields=sorted(set(filled)), manual_fields=manual,
                          uploaded_files=sorted(set(uploaded)), submitted=did_submit, message=msg,
                          screenshot_path=screenshot_path, confirmation_term=confirmation_term,

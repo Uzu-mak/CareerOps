@@ -163,3 +163,29 @@ def test_time_sensitive_answers_are_never_reused():
     assert not bankable('What is your earliest start date?')
     assert not bankable("If Palantir didn't exist, what company would you work at?")   # names the employer
     assert bankable("What is the hardest technical challenge you've faced?")
+
+
+def test_education_questions_are_filled_from_the_profile():
+    facts = build_facts(profile(education_school='University of Washington', education_degree="Bachelor's", education_field='Computer Science',
+                                education_graduation_year=2026, education_gpa='3.6', high_school_name='Accra Academy', high_school_graduation_year=2019))
+    plan = plan_application([
+        field('Which university are you currently attending or did you last attend? Please select "Other (School Not Listed)" if your school is not listed.',
+              'select', True, options=['Select...', 'Stanford University', 'University of Washington', 'Other (School Not Listed)']),
+        field('Please include your intended graduation year for the degree you are pursuing.', 'select', True, options=['2025', '2026', '2027']),
+        field('High School Name', required=True), field('Year of High School Graduation', required=True),
+        field('Highest level of education', 'select', options=["Bachelor's Degree", "Master's Degree"]),
+        field('Major', required=True), field('GPA'),
+    ], facts)
+    got = ops(plan)
+    assert got['Which university are you currently attending or did you last attend? Please select "Other (School Not Listed)" if your school is not listed.'] == ('select', 'University of Washington')
+    assert got['Please include your intended graduation year for the degree you are pursuing.'] == ('select', '2026')
+    assert got['High School Name'] == ('fill', 'Accra Academy') and got['Year of High School Graduation'] == ('fill', '2019')
+    assert got['Highest level of education'] == ('select', "Bachelor's Degree")
+    assert got['Major'] == ('fill', 'Computer Science') and got['GPA'] == ('fill', '3.6')
+    assert plan.unresolved == []
+
+
+def test_unlisted_school_picks_other():
+    facts = build_facts(profile(education_school='Bellevue College'))
+    plan = plan_application([field('Which university did you attend?', 'select', True, options=['Stanford University', 'Other (School Not Listed)'])], facts)
+    assert ops(plan) == {'Which university did you attend?': ('select', 'Other (School Not Listed)')}

@@ -84,7 +84,12 @@ def attempt_autopilot_application(db: Session, profile: CandidateProfile, job: J
             extra_links = application_links(db, profile.id)
             approved = approved_answers(db, app)
             bank = answer_bank(db, exclude_application_id=app.id)
-            result = run_generic_browser(profile, job, app, target, resume_path=package['resume'].file_path, cover_letter_path=package['cover_letter'].file_path, submit=True, extra_links=extra_links, approved_review_answers=approved, answer_bank=bank)
+            from careerops.services.answer_drafts import make_drafter
+            from careerops.services.portal_sessions import note_expired_session, session_for
+            saved = session_for(db, target)
+            result = run_generic_browser(profile, job, app, target, resume_path=package['resume'].file_path, cover_letter_path=package['cover_letter'].file_path, submit=True, extra_links=extra_links, approved_review_answers=approved, answer_bank=bank,
+                                         storage_state=saved.session_state_uri if saved else None, drafter=make_drafter(db, job, profile))
+            note_expired_session(db, saved, result)
             run.output_summary = f'{result.status}; {len(result.filled_fields)} fields; {len(result.manual_fields)} review items'
     except Exception as exc:
         app.status = 'review'; app.requires_human_review = True

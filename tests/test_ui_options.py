@@ -47,7 +47,7 @@ def test_setup_checklist_tracks_what_is_missing():
     p = SimpleNamespace(baseline_resume_path='/r.pdf', legal_answers_verified_at=None, skills=['a', 'b'], role_families=['AI Engineer'],
                         linkedin_url='https://www.linkedin.com/in/your-name-123abc/', github_url='https://github.com/x')
     done = {i['key']: i['done'] for i in setup_checklist(p, 0, False)}
-    assert done == {'resume': True, 'legal': False, 'skills': False, 'roles': True, 'links': False, 'alerts': False}
+    assert done == {'resume': True, 'legal': False, 'skills': False, 'education': False, 'roles': True, 'links': False, 'alerts': False}
     assert setup_checklist(None) == []
 
 

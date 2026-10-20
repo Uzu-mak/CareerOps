@@ -20,7 +20,7 @@
   <div class="actions">
     <button class="btn" type="button" data-action="analyze-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-refresh"/></svg>{{ 'Re-analyze' if analysis else 'Analyze' }}</button>
     <button class="btn" type="button" data-action="prepare-job" data-id="{{ job.id }}"><svg class="icon"><use href="#i-file"/></svg>Prepare documents</button>
-    {% if apply_url and apply_mode == 'auto' %}
+    {% if apply_url and apply_mode in ('auto', 'session') %}
       <a class="btn ghost" href="{{ apply_url }}" target="_blank" rel="noopener">Employer page<svg class="icon"><use href="#i-external"/></svg></a>
       <button class="btn" type="button" data-action="dry-run" data-id="{{ job.id }}" title="Fill the form without submitting"><svg class="icon"><use href="#i-eye"/></svg>Dry run</button>
       <button class="btn primary" type="button" data-action="apply" data-id="{{ job.id }}"><svg class="icon"><use href="#i-send"/></svg>Apply</button>
@@ -33,13 +33,20 @@
   </div>
 </header>
 
-{% if apply_url and apply_mode == 'manual' %}
+{% if apply_url and apply_mode == 'session' %}
+<div class="callout" style="margin-bottom:18px"><svg class="icon"><use href="#i-shield"/></svg>
+  <div><strong>Using your saved sign-in for {{ session_site }}.</strong> The agent opens {{ job.company }}'s site already signed in. Portals like this vary a lot, so try a <strong>Dry run</strong> first.</div></div>
+{% elif apply_url and apply_mode == 'manual' %}
 <div class="callout" style="margin-bottom:18px"><svg class="icon"><use href="#i-info"/></svg>
-  <div><strong>Apply to this one yourself.</strong> {{ job.company }}'s careers site makes you sign in to its own portal before showing a form, so the browser agent can't fill it.
-    Use <strong>Prepare documents</strong> for a tailored resume and cover letter, apply on their site, then click <strong>Mark as applied</strong> so it's tracked.
-    Auto-apply works on Greenhouse, Lever and Ashby forms — <a class="link" href="/jobs?apply_mode=auto">see those jobs</a>.</div></div>
+  <div style="flex:1"><strong>{{ job.company }}'s site needs you to sign in first.</strong> Two ways to apply:
+    <ol style="margin:8px 0 0;padding-left:18px">
+      <li><strong>Sign in once, then let CareerOps apply.</strong> In your CareerOps folder run
+        <span class="row" style="margin:6px 0"><code class="pre" style="padding:6px 10px;max-height:none;flex:1" id="signinJob">signin.bat "{{ apply_url }}"</code><button class="btn sm" type="button" data-action="copy" data-target="signinJob">Copy</button></span>
+        sign in in the window that opens, press Enter, then refresh this page.</li>
+      <li><strong>Apply yourself.</strong> Use <strong>Prepare documents</strong>, apply on their site, then <strong>Mark as applied</strong>.</li>
+    </ol></div></div>
 {% endif %}
-{% if open_total and apply_mode == 'auto' %}
+{% if open_total and apply_mode in ('auto', 'session') %}
 <div class="callout warn" style="margin-bottom:18px"><svg class="icon"><use href="#i-alert"/></svg>
   <div>{% if open_blockers %}<strong>{{ open_blockers[0].blocker.title }}.</strong> {{ open_blockers[0].blocker.action }}{% endif %}
     {% if open_questions %}<strong>{{ open_questions | length }} question{{ 's' if open_questions | length != 1 }} need your answer.</strong>{% endif %}
@@ -247,6 +254,12 @@
       </div>
     </div>
     <div class="card">
+      {% if auto_answers %}
+      <div class="card-head"><div><div class="eyebrow">Written for you</div><h2>Answers CareerOps wrote</h2><p>From your resume and evidence, because automatic essay answers are on.</p></div></div>
+      <div class="card-body flush">
+        {% for a in auto_answers %}<details class="disclosure"><summary><span class="grow">{{ a.question }}</span></summary><div class="disclosure-body"><div class="pre" style="font-family:var(--font-sans)">{{ a.answer }}</div></div></details>{% endfor %}
+      </div>
+      {% endif %}
       <div class="card-head"><div><div class="eyebrow">Agents</div><h2>Run log</h2></div></div>
       <div class="card-body">
         <div class="timeline">

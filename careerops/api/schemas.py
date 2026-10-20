@@ -26,6 +26,14 @@ class ProfileUpdate(BaseModel):
     work_authorization_type: str | None=None
     work_authorization_expiration: str | None=None
     eeo_preference: str | None=None
+    education_school: str | None=None
+    education_degree: str | None=None
+    education_field: str | None=None
+    education_graduation_year: int | None=None
+    education_graduation_month: int | None=None
+    education_gpa: str | None=None
+    high_school_name: str | None=None
+    high_school_graduation_year: int | None=None
 
 class ManualJobIn(BaseModel):
     company: str

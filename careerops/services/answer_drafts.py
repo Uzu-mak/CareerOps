@@ -54,3 +54,31 @@ def draft_answer(llm, question: str, job, profile, evidence_items) -> dict:
     if not answer:
         raise ValueError('The model returned an empty draft')
     return {'draft': answer, 'missing': str(data.get('missing') or '').strip()}
+
+
+def make_drafter(db, job, profile):
+    """A drafter for the browser agent when the user opted in, else None.
+
+    Only drafts with no [gaps] are used; anything uncertain still pauses for review.
+    """
+    from careerops.agents.evidence import rank_evidence
+    from careerops.agents.llm import get_llm
+    from careerops.services.autopilot import get_runtime_settings
+
+    if not getattr(get_runtime_settings(db), 'auto_draft_essays', False):
+        return None
+    llm = get_llm()
+    if llm is None or not (getattr(profile, 'baseline_resume_text', '') or '').strip():
+        return None
+    evidence = rank_evidence(db, profile, job, limit=6)
+
+    def draft(question: str):
+        try:
+            out = draft_answer(llm, question, job, profile, evidence)
+        except Exception:
+            return None
+        if out['missing'] or '[' in out['draft']:
+            return None
+        return out['draft']
+
+    return draft

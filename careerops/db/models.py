@@ -50,6 +50,16 @@ class CandidateProfile(Base):
     # Opt-in: answer voluntary EEO questions with 'decline to self-identify'. None = ask/leave blank.
     eeo_preference: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Education, so application forms stop asking for it.
+    education_school: Mapped[str | None] = mapped_column(String(220), nullable=True)
+    education_degree: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    education_field: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    education_graduation_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    education_graduation_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    education_gpa: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    high_school_name: Mapped[str | None] = mapped_column(String(220), nullable=True)
+    high_school_graduation_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     baseline_minutes: Mapped[dict] = mapped_column(JSON, default=lambda: {
         'jd_analysis': 8,
         'fit_assessment': 12,
@@ -267,6 +277,8 @@ class RuntimeSettings(Base):
     auto_apply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_apply_min_fit: Mapped[int] = mapped_column(Integer, default=90)
     max_auto_applications_per_day: Mapped[int] = mapped_column(Integer, default=5)
+    # Opt-in: answer essay questions with a draft from the resume/evidence when it has no gaps.
+    auto_draft_essays: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class SourceConfig(Base):

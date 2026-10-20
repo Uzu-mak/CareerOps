@@ -57,6 +57,8 @@
       <div class="card-body">
         <label class="switch" style="padding-top:0"><span class="switch-text"><strong>Autopilot</strong><span>Submit eligible applications without asking</span></span>
           <input type="checkbox" name="auto_apply_enabled" {{ 'checked' if runtime.auto_apply_enabled }}><span class="track"></span></label>
+        <label class="switch"><span class="switch-text"><strong>Answer essay questions automatically</strong><span>{% if providers.llm %}Writes them from your resume and journal; anything it can't support from your material still pauses for you{% else %}Needs <code>LLM_PROVIDER=openai</code> in .env{% endif %}</span></span>
+          <input type="checkbox" name="auto_draft_essays" {{ 'checked' if runtime.auto_draft_essays }} {{ '' if providers.llm else 'disabled' }}><span class="track"></span></label>
         <div class="field" style="margin-top:12px"><label for="minfit">Minimum fit score</label>
           <div class="range-row"><input id="minfit" type="range" name="auto_apply_min_fit" min="50" max="100" step="1" value="{{ runtime.auto_apply_min_fit }}" data-output="minfitOut"><output id="minfitOut">{{ runtime.auto_apply_min_fit }}</output></div></div>
         <div class="field" style="margin-top:12px"><label for="cap">Daily limit</label>
@@ -76,6 +78,28 @@
           <div class="progress" style="margin-bottom:10px"><i id="analyzeBar" style="width:0%"></i></div>
           <button class="btn" type="button" data-action="analyze-pending" data-progress="analyzeBar" data-total="{{ pending }}"><svg class="icon"><use href="#i-spark"/></svg>Analyze {{ pending }} waiting job{{ 's' if pending != 1 }}</button>
         {% else %}<p class="muted">Every job has been analyzed.</p>{% endif %}
+      </div>
+    </section>
+
+    <section class="card" id="signins">
+      <div class="card-head"><div><div class="eyebrow">Saved sign-ins</div><h2>Sites CareerOps can apply on as you</h2>
+        <p>Sign in once from your PC; the agent reuses that session. Your password is never stored.</p></div></div>
+      <div class="card-body flush">
+        <div class="list">
+          {% for s in sessions %}
+            <div class="list-item"><span class="dot {{ '' if s.status == 'authenticated' else 'warn' }}"></span>
+              <div class="grow"><strong>{{ s.company }}</strong><span class="sub">{% if s.status == 'authenticated' %}Saved <time datetime="{{ s.last_authenticated_at | iso }}" data-relative>{{ s.last_authenticated_at | short_dt }}</time>{% else %}Expired — sign in again{% endif %}</span></div>
+              <button class="btn sm ghost icon-only" type="button" data-action="delete-session" data-id="{{ s.id }}" data-name="{{ s.company }}" aria-label="Delete saved sign-in for {{ s.company }}"><svg class="icon"><use href="#i-trash"/></svg></button></div>
+          {% else %}
+            <div class="empty" style="padding:22px 20px"><span>None yet. Jobs that need an account show a “Sign in once” button.</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-foot" style="display:block">
+        <div class="field-label" style="margin-bottom:6px">Sign in to a site</div>
+        <div class="row"><code class="pre" style="flex:1;padding:8px 10px;max-height:none" id="signinCmd">signin.bat "https://www.example.com/login"</code>
+          <button class="btn sm" type="button" data-action="copy" data-target="signinCmd">Copy</button></div>
+        <p class="hint soft" style="margin-top:6px;font-size:12px">Run it in your CareerOps folder. A Chrome window opens; sign in, then press Enter in the terminal.</p>
       </div>
     </section>
 

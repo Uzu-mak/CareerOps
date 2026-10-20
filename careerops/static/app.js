@@ -322,6 +322,15 @@
       if (!(await confirmDialog({ title: 'Delete this entry?', body: 'Its evidence will no longer be used for resumes or fit scoring.', ok: 'Delete', tone: 'danger' }))) return;
       await api(`/api/journal/${btn.dataset.id}`, { method: 'DELETE' }); btn.closest('details')?.remove(); toast('Entry deleted');
     },
+    async 'delete-session'(btn) {
+      if (!(await confirmDialog({ title: `Forget the sign-in for ${btn.dataset.name}?`, body: 'The agent will no longer apply there as you until you sign in again.', ok: 'Forget', tone: 'danger' }))) return;
+      await api(`/api/portal-sessions/${btn.dataset.id}`, { method: 'DELETE' }); btn.closest('.list-item')?.remove(); toast('Saved sign-in deleted');
+    },
+    async copy(btn) {
+      const text = document.getElementById(btn.dataset.target)?.textContent.trim() || '';
+      try { await navigator.clipboard.writeText(text); } catch { const r = document.createRange(); r.selectNodeContents(document.getElementById(btn.dataset.target)); getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+      toast('Copied — paste it into a terminal in your CareerOps folder', { timeout: 3500 });
+    },
     'add-chip'(btn) {
       const box = document.getElementById(btn.dataset.target);
       box?.addTag(btn.textContent.trim()); btn.remove();
@@ -419,6 +428,16 @@
       });
       toast('Search preferences saved — re-run analysis to rescore jobs.');
     },
+    async 'profile-education'(f) {
+      const intOrNull = (v) => (v === '' || v === undefined ? null : parseInt(v, 10));
+      await saveProfile({
+        education_school: fieldValue(f, 'education_school') || null, education_degree: fieldValue(f, 'education_degree') || null,
+        education_field: fieldValue(f, 'education_field') || null, education_graduation_year: intOrNull(fieldValue(f, 'education_graduation_year')),
+        education_graduation_month: intOrNull(fieldValue(f, 'education_graduation_month')), education_gpa: fieldValue(f, 'education_gpa') || null,
+        high_school_name: fieldValue(f, 'high_school_name') || null, high_school_graduation_year: intOrNull(fieldValue(f, 'high_school_graduation_year')),
+      });
+      toast('Education saved — it will be filled into applications.');
+    },
     async 'profile-legal'(f) {
       const values = {
         authorized_to_work_us: boolOrNull(fieldValue(f, 'authorized_to_work_us')),
@@ -463,7 +482,7 @@
       location.href = `/jobs/${x.job_id}`;
     },
     async autopilot(f) {
-      await api('/api/runtime-settings', { method: 'PUT', form: { auto_apply_enabled: fieldValue(f, 'auto_apply_enabled') ? 'true' : 'false', auto_apply_min_fit: fieldValue(f, 'auto_apply_min_fit'), max_auto_applications_per_day: fieldValue(f, 'max_auto_applications_per_day') } });
+      await api('/api/runtime-settings', { method: 'PUT', form: { auto_apply_enabled: fieldValue(f, 'auto_apply_enabled') ? 'true' : 'false', auto_apply_min_fit: fieldValue(f, 'auto_apply_min_fit'), max_auto_applications_per_day: fieldValue(f, 'max_auto_applications_per_day'), auto_draft_essays: fieldValue(f, 'auto_draft_essays') ? 'true' : 'false' } });
       toast(`Autopilot ${fieldValue(f, 'auto_apply_enabled') ? 'on' : 'off'}`, { title: 'Saved' });
     },
     async notifications(f) {

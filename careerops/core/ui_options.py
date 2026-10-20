@@ -43,6 +43,9 @@ WORK_AUTH_TYPES = [
     'L-2 EAD', 'TN', 'O-1', 'E-3', 'Asylum / refugee EAD', 'Other EAD',
 ]
 
+DEGREES = ["High school diploma", "Associate's", "Bachelor's", "Master's", 'MBA', 'PhD', 'Bootcamp / certificate']
+GRADUATION_YEARS = list(range(2032, 1979, -1))
+
 EEO_PREFERENCES = [
     ('', 'Leave blank when optional; ask me when required'),
     ('decline', 'Answer "decline to self-identify"'),
@@ -149,6 +152,9 @@ BLOCKERS = [
     ('portal account password', 'The site needs an account',
      'This portal requires creating an account with a password and email verification. CareerOps never stores portal passwords.',
      'Create the account on the employer site, then run Apply again.'),
+    ('saved sign-in expired', 'Your saved sign-in has expired',
+     'CareerOps opened the site with your saved session, but the site asked to sign in again.',
+     'Sign in again with signin.bat (see the job page), then run Apply again.'),
     ('portal sign-in', 'The site needs you to sign in',
      'This portal asked for a sign-in before showing the application.',
      'Sign in on the employer site, then run Apply again.'),
@@ -218,7 +224,7 @@ def suggest_roles(text: str) -> list[str]:
 def as_template_globals() -> dict:
     return {
         'role_families': ROLE_FAMILIES, 'skills': SKILLS, 'locations': US_LOCATIONS,
-        'work_auth_types': WORK_AUTH_TYPES, 'eeo_preferences': EEO_PREFERENCES, 'link_types': LINK_TYPES,
+        'work_auth_types': WORK_AUTH_TYPES, 'degrees': DEGREES, 'graduation_years': GRADUATION_YEARS, 'eeo_preferences': EEO_PREFERENCES, 'link_types': LINK_TYPES,
         'application_statuses': APPLICATION_STATUSES, 'source_types': SOURCE_TYPES, 'scan_intervals': SCAN_INTERVALS,
         'decisions': DECISIONS, 'priorities': PRIORITIES, 'workplaces': WORKPLACES, 'job_sorts': JOB_SORTS,
         'status_label': {v: lbl for v, lbl, _ in APPLICATION_STATUSES},

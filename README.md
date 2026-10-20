@@ -69,6 +69,15 @@ What it will not do:
 - **CAPTCHA / MFA / accounts.** A visible CAPTCHA challenge, a verification-code prompt or a sign-in/create-account wall pauses the run. The invisible reCAPTCHA badge most ATS pages carry is not treated as a blocker. Raw portal passwords are never stored.
 - **Legal and EEO answers.** Work authorization and sponsorship are answered only from values you verified on `/profile`. Voluntary EEO questions (gender, race, veteran, disability) are left blank when optional; if you set *Voluntary EEO questions → "decline to self-identify"* on `/profile`, the agent picks the decline option instead. Criminal history, attestations, citizenship, clearance and salary are never answered without your explicit answer for that application.
 
+### Sign in once, then let it apply
+
+Big-company portals (Workday, Meta, Amazon…) make you sign in before a form exists. Run `signin.bat "https://site/login"` in the CareerOps folder: a normal Chrome window opens, you sign in yourself (including any emailed or texted code), press Enter, and the site's session cookies are saved. The agent then opens that site already signed in. Passwords are never seen or stored; delete a saved sign-in any time on **Sources & automation**. When a session expires, the job shows "Your saved sign-in has expired".
+
+### Fewer questions
+
+- **Education** on your profile fills university, degree, major, graduation year, GPA and high-school questions; if your school isn't in a form's list, the form's "Other" option is chosen.
+- **Answer essay questions automatically** (Sources & automation, needs `LLM_PROVIDER`) writes essay answers during the run from your resume and Build Journal. A draft that would need anything your material doesn't contain is not used; the question pauses for you instead. Answers it wrote are listed on the job's Activity tab.
+
 ### Human review and the answer bank
 
 When a run pauses, the job page lists the exact questions it could not answer. Enter the answer you approve and run Apply again; the agent fills it and continues.
@@ -260,6 +269,7 @@ See `FEATURE_MATRIX.md` for what is implemented, what needs credentials, and wha
 
 ## Changelog
 
+- **Fewer stops.** Saved sign-in sessions (`signin.bat`), education on the profile, opt-in automatic essay answers. Profile saves now change only the section saved.
 - **Small-company discovery.** Hacker News "Who is hiring?" and Remotive sources, and automatic addition of Greenhouse/Lever/Ashby boards linked from any source.
 - **Interface rebuild.** New design matching the Digital Twin; Jobs page with search, filters, sorting and pagination (server-side, one query); job tabs with typed answer inputs (Yes/No, salary, free text), dry run and document viewer; tag inputs with autocomplete for skills, roles and locations; skills auto-filled from the uploaded resume; Sources & automation page with per-source switches and frequency; server-side batch analysis; setup checklist; mobile layout.
 - **Hosting.** Google sign-in for hosted instances (fails closed without it), Cloud Run guide, `$PORT` support, `.dockerignore` so `.env` is never baked into images, Compose reads `.env` directly.
