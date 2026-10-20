@@ -79,14 +79,16 @@ SENSITIVE = {
     'citizenship': r'\b(citizen|citizenship|green card|permanent resident|visa (status|type)|immigration)\b',
     'clearance': r'\b(security clearance|clearance|export control|itar|u\.?s\.? person)\b',
     'salary': r'\b(salary|compensation|pay (expectation|range)|desired pay|expected pay|rate expectation)\b',
+    # True today, stale next month: answered per application, never reused.
+    'timing': r'\b(deadlines?|start date|available to start|earliest start|notice period|availability)\b',
 }
 WORK_AUTH = r'\b(authori[sz]ed to work|legally (authori[sz]ed|eligible|able)|eligible to work|right to work|work authori[sz]ation|work permit)\b'
 SPONSOR = r'\bsponsor(ship)?\b'
-MOTIVATION = r"\b(why|what (interests|excites|attracts|draws) you|interest(ed)? in (joining|working)|cover letter)\b"
+MOTIVATION = r"\b(why|what (interests|excites|attracts|draws) you|interest(ed)? in (joining|working)|cover letter|didn't exist|did not exist|most excited)\b"
 # Categories whose answers must come from this application's review, never the bank.
 # Motivation answers name the employer, so they never carry over either.
 NO_BANK = {'eeo', 'identity', 'criminal', 'attestation', 'citizenship', 'clearance', 'salary', 'work_auth',
-           'sponsorship', 'motivation'}
+           'sponsorship', 'motivation', 'timing'}
 
 PROFILE_RULES: list[tuple[str, str]] = [
     ('preferred_name', r'\b(preferred (first )?name|nickname|goes by)\b'),
@@ -333,6 +335,7 @@ class Plan:
     skipped: list[str] = field(default_factory=list)
 
 
+MULTI_SEP = ' | '   # how the review queue stores several choices for one question
 ALWAYS_SET = {'first_name', 'last_name', 'full_name', 'preferred_name', 'email', 'phone', 'linkedin', 'github', 'portfolio'}
 
 
@@ -385,6 +388,17 @@ def plan_application(fields: list[dict], facts: Facts, uploaded: set[str] | None
             continue
 
         options = f.get('options') or []
+        if ftype == 'checkbox_group' and MULTI_SEP in str(answer.value):
+            # "Check all that apply": one check per chosen option.
+            picked = 0
+            for part in [x.strip() for x in str(answer.value).split(MULTI_SEP) if x.strip()]:
+                idx = choose_option([o.get('text', '') for o in options], Answer(part, answer.source, _kind_of(part)))
+                if idx is not None:
+                    plan.actions.append(Action(key, 'check', label, options[idx].get('text'), option_key=options[idx]['id'], source=answer.source))
+                    picked += 1
+            if not picked and f.get('required') and not filled:
+                plan.unresolved.append({'label': label, 'category': cat, 'reason': f'none of "{answer.value}" match the options'})
+            continue
         if ftype in {'select', 'radio', 'buttons', 'checkbox_group'}:
             idx = choose_option([o.get('text', '') for o in options], answer)
             if idx is None:

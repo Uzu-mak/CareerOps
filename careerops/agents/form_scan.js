@@ -39,7 +39,11 @@
   const textOf = (node) => {
     if (!node) return '';
     const c = node.cloneNode(true);
-    c.querySelectorAll('input,select,textarea,option,button,script,style,svg').forEach((n) => n.remove());
+    // Drop controls plus widget chatter that lives inside labels on some ATSs
+    // (Lever: "No location found…", "Analyzing resume… Success!").
+    c.querySelectorAll('input,select,textarea,option,button,script,style,svg,[hidden],[aria-live],[role="status"],[role="alert"],[role="listbox"],'
+      + '[class*="error" i],[class*="loading" i],[class*="spinner" i],[class*="dropdown" i],[class*="result" i],[class*="filename" i],[class*="status" i],[class*="hint" i]')
+      .forEach((n) => n.remove());
     return clean(c.textContent);
   };
   const STAR = /[*✱]/;
@@ -94,7 +98,14 @@
 
   const labelFor = (el) => {
     if (el.labels && el.labels.length) {
-      const l = labelFrom(el.labels[0]);
+      const lab = el.labels[0];
+      // A <label> wrapping the whole question (label text + field + widget): use its title part.
+      if (lab.contains(el)) {
+        const title = [...lab.querySelectorAll('[class*="label" i], [class*="question" i], [class*="title" i]')]
+          .find((n) => !n.contains(el) && !n.querySelector('input,select,textarea') && textOf(n));
+        if (title) { const l = labelFrom(title); l.star = l.star || STAR.test(lab.textContent || ''); return l; }
+      }
+      const l = labelFrom(lab);
       if (l.text) return l;
     }
     if (el.getAttribute('aria-labelledby')) {
@@ -277,7 +288,8 @@
   if (req.op === 'text') return clean(document.body ? document.body.innerText : '').toLowerCase().slice(0, 40000);
   if (req.op === 'options') {
     const out = [];
-    const sel = '[role="option"], [class*="select__option" i], [class*="option" i][id*="option" i], li[id*="option" i]';
+    const sel = '[role="option"], [class*="select__option" i], [class*="option" i][id*="option" i], li[id*="option" i], '
+      + '[class*="dropdown-location" i], [class*="dropdown-results" i] > *, [class*="autocomplete" i] li, [class*="suggestion" i]';
     for (const o of document.querySelectorAll(sel)) {
       if (!visible(o) || out.length >= 200) continue;
       const text = clean(o.textContent);

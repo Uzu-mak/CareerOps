@@ -18,7 +18,14 @@ def test_skill_detection_uses_whole_words_and_aliases():
 
 
 def test_review_questions_get_the_right_control():
-    assert review_input('Are you legally authorized to work in the United States?') == {'kind': 'select', 'category': 'work_auth', 'options': ['Yes', 'No']}
+    auth = review_input('Are you legally authorized to work in the United States?')
+    assert (auth['kind'], auth['category'], auth['options']) == ('select', 'work_auth', ['Yes', 'No'])
+    langs = review_input('Language Skill(s) (Check all that apply)', {'field_type': 'checkbox_group', 'options': ['English', 'Twi']})
+    assert (langs['kind'], langs['options']) == ('multi', ['English', 'Twi'])                     # the form's own choices
+    assert review_input('Preferred office', {'field_type': 'select', 'options': ['NYC', 'DC']})['options'] == ['NYC', 'DC']
+    assert review_input('Share my resume with partners', {'field_type': 'checkbox'})['options'] == ['Yes', 'No']
+    essay = review_input('Hardest challenge? (Approx. 200 words)')
+    assert (essay['kind'], essay['words']) == ('textarea', 200)
     assert review_input('Have you ever been convicted of a felony?')['options'] == ['Yes', 'No']
     assert review_input('Gender')['kind'] == 'select'
     assert review_input('What are your salary expectations?')['kind'] == 'number'

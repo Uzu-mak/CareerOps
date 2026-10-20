@@ -150,3 +150,16 @@ def test_same_question():
     assert same_question('Desired salary', 'What is your desired salary?')
     assert not same_question('Gender', 'Gender identity and pronouns preference for the team')
     assert not same_question('Are you authorized to work?', 'Do you require sponsorship?')
+
+
+def test_check_all_that_apply_answers_check_each_option():
+    facts = build_facts(profile(), approved_answers={'Language Skill(s) (Check all that apply)': 'English | Twi'})
+    plan = plan_application([field('Language Skill(s) (Check all that apply)', 'checkbox_group', True, options=['English', 'French', 'Twi'])], facts)
+    assert [a.value for a in plan.actions] == ['English', 'Twi']
+
+
+def test_time_sensitive_answers_are_never_reused():
+    assert not bankable('Do you have any upcoming offer deadlines?')
+    assert not bankable('What is your earliest start date?')
+    assert not bankable("If Palantir didn't exist, what company would you work at?")   # names the employer
+    assert bankable("What is the hardest technical challenge you've faced?")

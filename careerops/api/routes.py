@@ -441,6 +441,23 @@ def save_application_review_answer(application_id:int, question:str=Form(...), a
     return {'ok':True,'resolved':row.resolved,'remaining':len(app.human_review_reasons or []),'requires_human_review':app.requires_human_review}
 
 
+@router.post('/applications/{application_id}/draft-answer')
+def draft_review_answer(application_id:int, question:str=Form(...), db:Session=Depends(get_db)):
+    """Draft an answer to an open-ended question from the resume and evidence (never saved automatically)."""
+    from careerops.agents.evidence import rank_evidence
+    from careerops.agents.llm import LLMUnavailable, get_llm
+    from careerops.services.answer_drafts import draft_answer
+    app=db.get(Application,application_id)
+    if not app: raise HTTPException(404,'Application not found')
+    job=db.get(JobPosting,app.job_id); p=db.scalar(select(CandidateProfile).limit(1))
+    llm=get_llm()
+    if llm is None: raise HTTPException(409,'Drafting needs a model: set LLM_PROVIDER=openai and OPENAI_API_KEY in .env, then restart.')
+    if not (p.baseline_resume_text or '').strip(): raise HTTPException(409,'Upload your master resume first; drafts only use your own material.')
+    try:
+        return draft_answer(llm, question, job, p, rank_evidence(db,p,job,limit=6))
+    except (LLMUnavailable, ValueError) as exc:
+        raise HTTPException(502,f'Could not draft an answer: {exc}')
+
 @router.delete('/sources/{source_id}')
 def delete_source(source_id:int, db:Session=Depends(get_db)):
     x=db.get(SourceConfig,source_id)

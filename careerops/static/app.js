@@ -267,13 +267,22 @@
       const x = await api(`/api/jobs/${btn.dataset.id}/simulate-apply`, { method: 'POST' });
       showResult({ ...x, status: 'READY_FOR_SUBMISSION' });
     },
+    async 'draft-answer'(btn) {
+      const card = btn.closest('.review-q');
+      const area = card.querySelector('textarea[name=answer]');
+      if (area.value.trim() && !(await confirmDialog({ title: 'Replace your text with a draft?', ok: 'Replace' }))) return;
+      const x = await api(`/api/applications/${btn.dataset.app}/draft-answer`, { method: 'POST', form: { question: card.dataset.question } });
+      area.value = x.draft; area.dispatchEvent(new Event('input', { bubbles: true }));
+      toast(x.missing ? `Check the [brackets]: ${x.missing}` : 'Drafted only from your resume and evidence. Read and edit before saving.', { title: 'Draft ready', tone: x.missing ? 'warn' : 'good', timeout: 8000 });
+    },
     async 'save-review'(btn) {
       const card = btn.closest('.review-q');
-      const answer = fieldValue(card, 'answer');
+      const multi = card.querySelector('[data-multi]');
+      const answer = multi ? $$('input:checked', multi).map((c) => c.value).join(' | ') : fieldValue(card, 'answer');
       if (!String(answer || '').trim()) { toast('Choose or type an answer first.', { tone: 'warn' }); return; }
       const x = await api(`/api/applications/${btn.dataset.app}/review-answer`, { method: 'POST', form: { question: card.dataset.question, answer, notes: fieldValue(card, 'notes') || '', resolved: 'true' } });
       card.classList.add('is-done');
-      const left = $$('.review-q:not(.is-done) [name=answer]').length;
+      const left = $$('.review-q:not(.is-done)').filter((c) => c.querySelector('[name=answer], [data-multi]')).length;
       if (left) { toast(`${left} question(s) left`, { title: 'Answer saved' }); return; }
       toast('Every question is answered.', { title: 'Answer saved' });
       const jobId = document.querySelector('[data-action="apply"]')?.dataset.id;
@@ -498,7 +507,16 @@
     const out = e.target.matches('input[type=range][data-output]') && document.getElementById(e.target.dataset.output);
     if (out) out.value = e.target.value;
   });
+  const countWords = (el) => {
+    const hint = el.closest('.field')?.querySelector('[data-wordcount]');
+    if (!hint) return;
+    const n = (el.value.trim().match(/\S+/g) || []).length; const target = Number(el.dataset.words || 0);
+    hint.textContent = target ? `${n} / ~${target} words` : n ? `${n} words` : '';
+    hint.style.color = target && n > target * 1.25 ? 'var(--warm)' : '';
+  };
+  $$('textarea[data-words]').forEach(countWords);
   document.addEventListener('input', (e) => {
+    if (e.target.matches('textarea[data-words]')) countWords(e.target);
     if (e.target.matches('input[type=range][data-output]')) { const out = document.getElementById(e.target.dataset.output); if (out) out.value = e.target.value; }
   });
   document.addEventListener('submit', async (e) => {

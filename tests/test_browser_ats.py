@@ -72,11 +72,26 @@ def _query(url):
 
 
 BANK = {'How did you hear about this job?': 'LinkedIn'}
+LEVER_ANSWERS = {'Language Skill(s) (Check all that apply)': 'English | Twi',
+                 "What is the hardest technical challenge you've faced? (Approx. 200 words)": 'Making a browser agent fill real ATS forms.'}
 LINKS = [{'label': 'Portfolio', 'url': 'https://ada.dev', 'link_type': 'portfolio', 'include_in_applications': True}]
 
 
+def test_lever_pauses_with_clean_labels_and_the_forms_own_options(monkeypatch, tmp_path):
+    result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK)
+
+    assert not result.submitted
+    assert set(result.manual_fields) == set(LEVER_ANSWERS)          # exactly the two questions it can't know
+    langs = result.manual_details['Language Skill(s) (Check all that apply)']
+    assert langs['type'] == 'checkbox_group' and langs['options'] == ['English', 'French', 'Twi']
+    assert result.manual_details["What is the hardest technical challenge you've faced? (Approx. 200 words)"]['type'] == 'textarea'
+    assert 'Current location' in result.filled_fields               # label without "No location found…" chatter
+    assert not any('No location' in f or 'ATTACH' in f for f in result.filled_fields)
+
+
 def test_lever_posting_through_confirmation(monkeypatch, tmp_path):
-    result = _run(monkeypatch, tmp_path, 'lever/posting.html', answer_bank=BANK, extra_links=LINKS)
+    result = _run(monkeypatch, tmp_path, 'lever/posting.html', answer_bank=BANK, extra_links=LINKS,
+                  approved_review_answers=LEVER_ANSWERS)
 
     assert result.submitted, result.manual_fields
     assert result.status == 'SUBMITTED'
@@ -90,12 +105,14 @@ def test_lever_posting_through_confirmation(monkeypatch, tmp_path):
     assert sent['cards[0][field2]'] == ''                 # optional, unknown: left alone ("Sussex" is not EEO)
     assert sent['eeo[gender]'] == 'Decline to self-identify'
     assert sent['urls[Portfolio]'] == 'https://ada.dev'
+    assert sent['selectedLocation'] == 'Seattle, Washington, United States'   # picked from the autocomplete
+    assert sent['languages'] == 'English,Twi'                                 # multi-select answer
     assert sent['resume'] == 'resume.pdf'
     assert Path(result.screenshot_path).name == 'application_42_confirmation.png'
 
 
 def test_prepare_mode_fills_but_never_submits(monkeypatch, tmp_path):
-    result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK, submit=False)
+    result = _run(monkeypatch, tmp_path, 'lever/apply.html', answer_bank=BANK, submit=False, approved_review_answers=LEVER_ANSWERS)
 
     assert not result.submitted
     assert result.status == 'READY_FOR_SUBMISSION'

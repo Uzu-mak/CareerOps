@@ -81,38 +81,32 @@ JOB_SORTS = [('fit', 'Best fit'), ('newest', 'Newest'), ('company', 'Company Aâ€
 YES_NO_CATEGORIES = {'work_auth', 'sponsorship', 'criminal', 'citizenship', 'clearance', 'attestation'}
 
 
-def review_input(question: str) -> dict:
-    """How the review queue should ask a question: yes/no, a decline choice, a number or free text."""
+def review_input(question: str, plan: dict | None = None) -> dict:
+    """How the review queue should ask a question.
+
+    When the browser agent saw the field, ``plan`` carries its type and the form's own
+    options, so the user picks exactly what the employer offers.
+    """
+    plan = plan or {}
     cat = classify(question)
+    ftype, options = plan.get('field_type'), [o for o in (plan.get('options') or []) if o]
+    words = re.search(r'(\d{2,4})\s*words', question or '', re.I)
+    spec = {'category': cat, 'words': int(words.group(1)) if words else None}
+    if ftype == 'checkbox_group' and options:
+        return {**spec, 'kind': 'multi', 'options': options}
+    if ftype == 'checkbox':
+        return {**spec, 'kind': 'select', 'options': ['Yes', 'No']}
+    if ftype in {'select', 'radio', 'buttons', 'combobox'} and options:
+        return {**spec, 'kind': 'select', 'options': options}
     if cat in YES_NO_CATEGORIES:
-        return {'kind': 'select', 'category': cat, 'options': ['Yes', 'No']}
+        return {**spec, 'kind': 'select', 'options': ['Yes', 'No']}
     if cat == 'eeo':
-        return {'kind': 'select', 'category': cat, 'options': ['Decline to self-identify'], 'free': True}
+        return {**spec, 'kind': 'select', 'options': ['Decline to self-identify'], 'free': True}
     if cat == 'salary':
-        return {'kind': 'number', 'category': cat}
-    if cat in {'motivation', 'question'} and len(question) > 40:
-        return {'kind': 'textarea', 'category': cat}
-    return {'kind': 'text', 'category': cat}
-
-
-SKILL_ALIASES = {
-    'REST APIs': ['rest api', 'restful', 'rest services'], 'CI/CD': ['ci/cd', 'continuous integration', 'continuous deployment'],
-    'LLMs': ['llm', 'llms', 'large language model'], 'AI agents': ['ai agent', 'ai agents', 'agentic'],
-    'Generative AI': ['generative ai', 'genai'], 'machine learning': ['machine learning'], 'Kubernetes': ['kubernetes', 'k8s'],
-    'JavaScript': ['javascript'], 'Node.js': ['node.js', 'nodejs'], 'Go': ['golang'], 'Next.js': ['next.js', 'nextjs'],
-    'PostgreSQL': ['postgresql', 'postgres'], 'scikit-learn': ['scikit-learn', 'sklearn'],
-}
-CASE_SENSITIVE = {'Go', 'ECS', 'EKS', 'S3', 'MCP', 'NLP', 'SQL', 'RAG', 'AWS', 'GCP', 'dbt'}
-
-
-def _skill_pattern(skill: str) -> re.Pattern:
-    phrases = SKILL_ALIASES.get(skill, []) + [skill]
-    body = '|'.join(re.escape(p) for p in phrases)
-    flags = 0 if skill in CASE_SENSITIVE and skill not in SKILL_ALIASES else re.I
-    return re.compile(r'(?<![A-Za-z0-9+#.])(?:' + body + r')(?![A-Za-z0-9+#])', flags)
-
-
-_PATTERNS = None
+        return {**spec, 'kind': 'number'}
+    if ftype == 'textarea' or spec['words'] or (cat in {'motivation', 'question'} and len(question) > 60):
+        return {**spec, 'kind': 'textarea'}
+    return {**spec, 'kind': 'text'}
 
 
 AUTO_APPLY_HOSTS = ('greenhouse.io', 'lever.co', 'ashbyhq.com')
@@ -183,6 +177,26 @@ def blocker_info(reason: str) -> dict | None:
 
 def is_blocker(reason: str) -> bool:
     return blocker_info(reason) is not None
+
+
+SKILL_ALIASES = {
+    'REST APIs': ['rest api', 'restful', 'rest services'], 'CI/CD': ['ci/cd', 'continuous integration', 'continuous deployment'],
+    'LLMs': ['llm', 'llms', 'large language model'], 'AI agents': ['ai agent', 'ai agents', 'agentic'],
+    'Generative AI': ['generative ai', 'genai'], 'machine learning': ['machine learning'], 'Kubernetes': ['kubernetes', 'k8s'],
+    'JavaScript': ['javascript'], 'Node.js': ['node.js', 'nodejs'], 'Go': ['golang'], 'Next.js': ['next.js', 'nextjs'],
+    'PostgreSQL': ['postgresql', 'postgres'], 'scikit-learn': ['scikit-learn', 'sklearn'],
+}
+CASE_SENSITIVE = {'Go', 'ECS', 'EKS', 'S3', 'MCP', 'NLP', 'SQL', 'RAG', 'AWS', 'GCP', 'dbt'}
+
+
+def _skill_pattern(skill: str) -> re.Pattern:
+    phrases = SKILL_ALIASES.get(skill, []) + [skill]
+    body = '|'.join(re.escape(p) for p in phrases)
+    flags = 0 if skill in CASE_SENSITIVE and skill not in SKILL_ALIASES else re.I
+    return re.compile(r'(?<![A-Za-z0-9+#.])(?:' + body + r')(?![A-Za-z0-9+#])', flags)
+
+
+_PATTERNS = None
 
 
 def detect_skills(text: str) -> list[str]:

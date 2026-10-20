@@ -43,6 +43,11 @@ def record_browser_result(db: Session, app: Application, result) -> Application:
     }
     answers = dict(app.answers or {})
     answers['_submission_evidence'] = evidence
+    for label, detail in (getattr(result, 'manual_details', None) or {}).items():
+        plan = dict(answers.get(label) or {})
+        plan.update({'mode': plan.get('mode', 'REVIEW'), 'reason': detail.get('reason') or plan.get('reason'),
+                     'field_type': detail.get('type'), 'options': detail.get('options') or []})
+        answers[label] = plan
     app.answers = answers
 
     if result.submitted:

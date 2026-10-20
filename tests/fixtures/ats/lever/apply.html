@@ -15,8 +15,9 @@
     <div class="application-field"><input type="email" name="email"></div></label></li>
   <li class="application-question"><label><div class="application-label">Phone<span class="required">✱</span></div>
     <div class="application-field"><input type="text" name="phone"></div></label></li>
-  <li class="application-question"><label><div class="application-label">Current location</div>
-    <div class="application-field"><input type="text" name="location"></div></label></li>
+  <li class="application-question"><label><div class="application-label">Current location<span class="required">✱</span></div>
+    <div class="application-field"><input type="text" name="location" id="loc" autocomplete="off"><input type="hidden" name="selectedLocation" id="locPicked">
+      <div class="dropdown-results" id="locResults"></div><span class="location-loading" hidden>Loading</span></div></label></li>
   <li class="application-question"><label><div class="application-label">Current company</div>
     <div class="application-field"><input type="text" name="org"></div></label></li>
 </ul>
@@ -41,6 +42,16 @@
     <div class="application-label full-width"><div class="text">Preferred office</div></div>
     <div class="application-field full-width"><select name="cards[0][field2]"><option value="">Select...</option><option>Brighton, East Sussex</option><option>Seattle, WA</option></select></div></li>
   <li class="application-question custom-question">
+    <div class="application-label full-width"><div class="text">Language Skill(s) (Check all that apply)<span class="required">✱</span></div></div>
+    <div class="application-field full-width"><ul data-qa="checkboxes">
+      <li><label><input type="checkbox" name="cards[0][field4][]" value="English"><span class="application-answer-alternative">English</span></label></li>
+      <li><label><input type="checkbox" name="cards[0][field4][]" value="French"><span class="application-answer-alternative">French</span></label></li>
+      <li><label><input type="checkbox" name="cards[0][field4][]" value="Twi"><span class="application-answer-alternative">Twi</span></label></li>
+    </ul></div></li>
+  <li class="application-question custom-question">
+    <div class="application-label full-width"><div class="text">What is the hardest technical challenge you've faced? (Approx. 200 words)<span class="required">✱</span></div></div>
+    <div class="application-field full-width"><textarea name="cards[0][field5]"></textarea></div></li>
+  <li class="application-question custom-question">
     <div class="application-label full-width"><div class="text">How did you hear about this job?<span class="required">✱</span></div></div>
     <div class="application-field full-width"><input type="text" name="cards[0][field3]"></div></li>
   <li class="application-question"><label><div class="application-label">Additional information</div>
@@ -64,15 +75,26 @@ document.getElementById('resume-upload-input').addEventListener('change', (e) =>
   document.querySelector('.filename').textContent = e.target.files[0].name;
   setTimeout(() => { document.querySelector('[name=name]').value = 'PARSED NAME FROM PDF'; }, 600);
 });
+// Lever's geocoder: suggestions appear only while typing a known city.
+const loc = document.getElementById('loc'), results = document.getElementById('locResults');
+loc.addEventListener('keyup', () => {
+  document.getElementById('locPicked').value = '';
+  const q = loc.value.trim().toLowerCase();
+  if (!q) { results.innerHTML = ''; return; }
+  const hits = ['Seattle, Washington, United States', 'Seattle Heights, Washington, United States'].filter((c) => c.toLowerCase().startsWith(q));
+  results.innerHTML = hits.length ? hits.map((h) => `<div class="dropdown-location">${h}</div>`).join('') : '<div class="dropdown-no-results">No location found. Try entering a different location</div>';
+  results.querySelectorAll('.dropdown-location').forEach((d) => d.addEventListener('click', () => { loc.value = d.textContent; document.getElementById('locPicked').value = d.textContent; results.innerHTML = ''; }));
+});
 document.getElementById('application-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
-  const need = ['name', 'email', 'phone', 'cards[0][field0]', 'cards[0][field1]', 'cards[0][field3]'];
+  const need = ['name', 'email', 'phone', 'selectedLocation', 'cards[0][field0]', 'cards[0][field1]', 'cards[0][field3]', 'cards[0][field4][]', 'cards[0][field5]'];
   const missing = need.filter((k) => !String(fd.get(k) || '').trim());
   if (!document.getElementById('resume-upload-input').files.length) missing.push('resume');
   if (missing.length) { const el = document.getElementById('err'); el.hidden = false; el.textContent = 'Missing: ' + missing.join(', '); return; }
   const q = new URLSearchParams();
   for (const [k, v] of fd.entries()) q.append(k, typeof v === 'string' ? v : v.name);
+  q.set('languages', fd.getAll('cards[0][field4][]').join(','));
   setTimeout(() => { location.href = 'thanks.html?' + q.toString(); }, 400);
 });
 </script>

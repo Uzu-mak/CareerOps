@@ -114,7 +114,8 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
             review_items.append({'question':q,'mode':plan.get('mode','REVIEW'),'suggested_answer':plan.get('answer'),
                                  'reason':plan.get('reason','CareerOps needs your answer before it can continue.'),
                                  'answer':row.answer if row else None,'resolved':row.resolved if row else False,
-                                 'notes':row.notes if row else None,'input':review_input(q),'blocker':blocker_info(q)})
+                                 'notes':row.notes if row else None,'input':review_input(q, plan),'blocker':blocker_info(q),
+                                 'field_type':plan.get('field_type')})
     blockers=[x for x in review_items if x['blocker']]
     review_items=[x for x in review_items if not x['blocker']]
     # Each "Prepare documents" makes a new set; show the newest of each type.
@@ -123,7 +124,7 @@ def job_page(job_id:int, request:Request, db:Session=Depends(get_db)):
         latest.setdefault(a.artifact_type, a)
     older_artifacts=len(artifacts)-len(latest)
     artifacts=list(latest.values())
-    return _render(request, db, 'job.html', profile=profile, job=job, apply_mode=apply_mode(job.application_url or job.canonical_url, job.ats), analysis=analysis, application=app_row, artifacts=artifacts,
+    return _render(request, db, 'job.html', profile=profile, job=job, llm_enabled=(settings.llm_provider or 'local').lower()!='local', apply_mode=apply_mode(job.application_url or job.canonical_url, job.ats), analysis=analysis, application=app_row, artifacts=artifacts,
                    runs=runs, review_items=review_items, blockers=blockers, older_artifacts=older_artifacts, evidence=evidence, account_plan=acct_plan,
                    verification=submission_evidence_summary(app_row) if app_row else None)
 

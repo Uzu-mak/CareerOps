@@ -78,6 +78,9 @@ class BrowserResult:
     screenshot_path: str | None = None
     confirmation_term: str | None = None
     confirmation_excerpt: str | None = None
+    # For each question it could not answer: the field type and the form's own options,
+    # so the review queue can offer exactly those choices.
+    manual_details: dict | None = None
 
 
 def detect_portal(url: str | None) -> str:
@@ -265,6 +268,59 @@ def _pick_combobox(form: _Form, field: dict, text: str) -> bool:
     return False
 
 
+def _visible_options(form: _Form) -> list[tuple]:
+    out = []
+    for fr in form.frames:  # menus are often portaled to the top frame
+        try:
+            out.extend((fr, o) for o in (fr.evaluate(SCAN_JS, {'op': 'options'}) or []))
+        except Exception:
+            pass
+    return out
+
+
+def _type_location(form: _Form, field: dict, value: str) -> None:
+    """Location boxes are usually geocoder autocompletes: type the city like a person, pick a suggestion."""
+    frame = form.frame_of(field)
+    loc = _loc(frame, field['id'])
+    city = value.split(',')[0].strip() or value
+    loc.fill('', timeout=4000)
+    try:
+        loc.press_sequentially(city, delay=70, timeout=8000)
+    except Exception:
+        loc.fill(city, timeout=4000)
+    form.page.wait_for_timeout(1600)
+    options = _visible_options(form)
+    texts = [o['text'] for _, o in options]
+    idx = choose_option(texts, Answer(value, 'profile'))
+    if idx is None:
+        idx = next((i for i, t in enumerate(texts) if norm(t).startswith(norm(city))), None)
+    if idx is not None:
+        fr, opt = options[idx]
+        _click(fr, opt['id'])
+        form.page.wait_for_timeout(300)
+    else:
+        loc.fill(value, timeout=4000)  # plain text box after all
+
+
+def _peek_options(form: _Form, field: dict) -> list[str]:
+    """Open a custom dropdown just to read its choices for the review queue."""
+    try:
+        _loc(form.frame_of(field), field['id']).click(timeout=3000)
+        form.page.wait_for_timeout(600)
+        texts = [o['text'] for _, o in _visible_options(form)][:60]
+        _loc(form.frame_of(field), field['id']).press('Escape')
+        return texts
+    except Exception:
+        return []
+
+
+def _field_detail(form: _Form, f: dict, reason: str) -> dict:
+    options = [o.get('text', '') for o in (f.get('options') or []) if o.get('text') and not o.get('placeholder')]
+    if f['type'] == 'combobox' and not options:
+        options = _peek_options(form, f)
+    return {'type': f['type'], 'options': options, 'reason': reason}
+
+
 def _execute(form: _Form, actions, filled: list[str], uploaded: list[str], uploaded_keys: set[str]) -> int:
     by_key = {f['key']: f for f in form.fields}
     done = 0
@@ -283,7 +339,10 @@ def _execute(form: _Form, actions, filled: list[str], uploaded: list[str], uploa
                 uploaded_keys.add(action.key)
                 form.page.wait_for_timeout(2500)  # let the portal parse the file
             elif action.op == 'fill':
-                _loc(frame, field['id']).fill(str(action.value), timeout=5000)
+                if classify(action.label) == 'location':
+                    _type_location(form, field, str(action.value))
+                else:
+                    _loc(frame, field['id']).fill(str(action.value), timeout=5000)
             elif action.op == 'select':
                 _loc(frame, field['id']).select_option(value=str(action.value), timeout=5000)
             elif action.op == 'check':
@@ -315,9 +374,17 @@ def _fill_page(page, facts: Facts, filled: list[str], uploaded: list[str], uploa
     return form
 
 
-def _still_missing(form: _Form, facts: Facts, uploaded_keys: set[str]) -> list[str]:
+def _still_missing(form: _Form, facts: Facts, uploaded_keys: set[str], details: dict | None = None) -> list[str]:
     plan = plan_application(form.application_fields, facts, uploaded=uploaded_keys)
     labels = [u['label'] for u in plan.unresolved]
+    if details is not None:
+        by_label = {}
+        for f in form.application_fields:
+            by_label.setdefault(f.get('label') or f.get('name') or 'unlabeled required field', f)
+        for u in plan.unresolved:
+            f = by_label.get(u['label'])
+            if f:
+                details[u['label']] = _field_detail(form, f, u['reason'])
     # A required field we tried to fill but that is still empty is also missing.
     for f in form.application_fields:
         if f.get('required') and not str(f.get('value') or '').strip() and f['key'] not in uploaded_keys:
@@ -326,6 +393,8 @@ def _still_missing(form: _Form, facts: Facts, uploaded_keys: set[str]) -> list[s
             label = f.get('label') or f.get('name') or 'unlabeled required field'
             if label not in labels:
                 labels.append(label)
+                if details is not None:
+                    details[label] = _field_detail(form, f, 'required field the form still shows as empty')
     return labels
 
 
@@ -412,6 +481,7 @@ def run_generic_browser(
 
     facts = build_facts(profile, extra_links, approved_review_answers, answer_bank, resume_path, cover_letter_path)
     filled: list[str] = []; manual: list[str] = []; uploaded: list[str] = []; uploaded_keys: set[str] = set()
+    details: dict = {}
     did_submit = False; confirmation_term = None; confirmation_excerpt = None
 
     with sync_playwright() as p:
@@ -446,7 +516,7 @@ def run_generic_browser(
             form = _fill_page(page, facts, filled, uploaded, uploaded_keys)
             if form.captcha:
                 manual.append('CAPTCHA'); break
-            missing = _still_missing(form, facts, uploaded_keys)
+            missing = _still_missing(form, facts, uploaded_keys, details)
             if missing:
                 manual.extend(missing); break
             if not submit:
@@ -490,7 +560,8 @@ def run_generic_browser(
         status = 'PAUSED_FOR_REVIEW'; msg = 'Human review required before submission can be confirmed.'
     else:
         status = 'READY_FOR_SUBMISSION'; msg = 'Application fields and files prepared; final submission not triggered.'
-    return BrowserResult(status=status, url=final_url, filled_fields=sorted(set(filled)), manual_fields=manual,
+    return BrowserResult(manual_details={k: v for k, v in details.items() if k in manual},
+                         status=status, url=final_url, filled_fields=sorted(set(filled)), manual_fields=manual,
                          uploaded_files=sorted(set(uploaded)), submitted=did_submit, message=msg,
                          screenshot_path=screenshot_path, confirmation_term=confirmation_term,
                          confirmation_excerpt=confirmation_excerpt)
